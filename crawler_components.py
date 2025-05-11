@@ -597,9 +597,10 @@ class MarkdownConverter:
         # ヘッダーの中の"ðï¸"を削除
         markdown_content = re.sub(r'##\s*\[(ðï¸\s*)?([^\]]*?)(\s*\d+\s*items)?\]\(([^)]+)\)', r'## [\2](\4)', markdown_content)
 
-        # マークダウンリンク内の特殊文字を置換する（より汎用的なアプローチ）
-        # [ðï¸ Something] の形式を [Something] に変換
-        markdown_content = re.sub(r'\[(ðï¸?\s*)?([^\]]*?)(\s*\d+\s*items)?\]', r'[\2]', markdown_content)
+        # マークダウンリンク内の特殊文字のみを置換
+        # [ðï¸ Something] の形式で特殊文字だけを削除し [Something] に変換
+        # カテゴリ情報などのテキストは保持
+        markdown_content = re.sub(r'\[ðï¸\s*([^\]]*?)(\s*\d+\s*items)?\]', r'[\1]', markdown_content)
 
         # ##+ で始まる見出し行内の特殊文字を削除
         markdown_content = re.sub(r'(#{1,6})\s+\[(ðï¸?\s*)?([^\]]*?)\](\([^)]+\))', r'\1 [\3]\4', markdown_content)
@@ -614,7 +615,12 @@ class MarkdownConverter:
         markdown_content = re.sub(r'(\]\([^)]+\))\n\n(\*)', r'\1\n\2', markdown_content)
 
         # カテゴリページの説明文が見出しとリンクされている場合、適切に分離
+        # ## [Placing Your First Order...](http://) のようなテキストを保持
         markdown_content = re.sub(r'##\s*\[(.*?)\]\((.*?)\)(.*?)##', r'## [\1](\2)\n\3\n\n##', markdown_content)
+
+        # 見出し + リンク + 説明文のパターンを処理
+        # 例: ## [Title](url)Description
+        markdown_content = re.sub(r'(##\s*\[[^\]]+\]\([^)]+\))([A-Za-z])', r'\1\n\2', markdown_content)
 
         # 連続する ## が残っている場合は削除（最後の ## など）
         markdown_content = re.sub(r'##\s*$', '', markdown_content)
@@ -729,7 +735,7 @@ class MarkdownConverter:
                     pass
 
             # コード部分のような連続した行を検出して整形
-            elif i < len(lines) - 3 and (' { ' in lines[i] or lines[i].strip().endswith('{')):
+            elif i < len(lines) - 3 and not lines[i].startswith('#') and not '](http' in lines[i] and (' { ' in lines[i] or lines[i].strip().endswith('{')):
                 start_idx = i
                 # JSONブロックの終わりを探す
                 block_content = []
