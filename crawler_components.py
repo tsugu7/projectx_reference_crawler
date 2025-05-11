@@ -698,8 +698,11 @@ class MarkdownConverter:
                 # API パスのパターンを検出してスペースを削除
                 link_text = re.sub(r'(\/[a-zA-Z0-9\/-]+\/)\s+([a-zA-Z0-9-]+)', r'\1\2', link_text)
 
-            # 4. URL内のすべてのスペースを削除
-            url = re.sub(r'\s', '', url)
+            # 4. URL内のすべてのスペースと改行コードを削除
+            # URL部分の改行コードやエンコード済み改行コードを削除
+            url = re.sub(r'\s+', '', url)
+            url = url.replace('%0A', '')  # エンコードされた改行も削除
+            url = url.replace('%20', '')  # エンコードされたスペースも削除
 
             return f"[{link_text}]({url})"
 
