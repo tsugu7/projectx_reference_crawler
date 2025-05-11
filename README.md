@@ -4,6 +4,8 @@
 
 このWebサイトクローラーは、指定したURLから始めて同一ドメイン内のWebページを自動的にクロールし、コンテンツをMarkdown形式で保存します。前回のクロール結果との差分を検出し、変更点をレポートする機能も備えています。Google Colab環境での実行に対応し、Python環境でのスタンドアロン実行も可能です。
 
+**【注意】実行方法の詳細については [CRAWLER_USAGE.md](./CRAWLER_USAGE.md) を参照してください。**
+
 ## 主な機能
 
 - **ウェブサイト全体のクロール**: 同一ドメイン内のページを自動的に巡回
@@ -174,6 +176,9 @@ python crawler_use_cases.py docs https://example.com
 - **`crawler_use_cases.py`**: 特定ユースケース向けスクリプト
 - **`test_crawler.py`**: テストスイート
 - **`website_crawler_improved.ipynb`**: Google Colab用ノートブック
+- **`run_crawler.sh`**: 基本的なクローリングスクリプト
+- **`run_crawler_advanced.sh`**: 高度なオプション指定が可能なクローリングスクリプト
+- **`CRAWLER_USAGE.md`**: クローラーの詳細な使用方法
 
 ## 差分検知について
 
