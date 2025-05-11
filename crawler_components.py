@@ -25,6 +25,9 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from contextlib import contextmanager
 
+# 見出し修正ユーティリティをインポート
+from heading_fixer import fix_concatenated_headings
+
 
 # 設定クラス
 @dataclass
@@ -749,13 +752,41 @@ class MarkdownConverter:
         markdown_content = re.sub(r'(\]\([^)]+\))([\w])', r'\1\n\2', markdown_content)
 
         # 見出し + URL + 説明文のパターンをより強固に処理
-        markdown_content = re.sub(r'(#{1,6}\s+\[[^\]]+\]\([^)]+\))\s+([A-Z][a-z])', r'\1\n\n\2', markdown_content)
+        heading_desc_pattern = r'(#{1,6}\s+\[[^\]]+\]\([^)]+\))\s+([A-Z][a-z])'
+        while re.search(heading_desc_pattern, markdown_content):
+            markdown_content = re.sub(heading_desc_pattern, r'\1\n\n\2', markdown_content)
 
         # カテゴリページの説明文が見出しとリンクされている場合、適切に分離
-        markdown_content = re.sub(r'(#{1,6}\s*\[[^\]]+\]\([^)]+\))([A-Za-z])', r'\1\n\2', markdown_content)
+        category_desc_pattern = r'(#{1,6}\s*\[[^\]]+\]\([^)]+\))([A-Za-z])'
+        while re.search(category_desc_pattern, markdown_content):
+            markdown_content = re.sub(category_desc_pattern, r'\1\n\2', markdown_content)
 
-        # 連続するヘッダーの間に適切な空白を挿入
-        markdown_content = re.sub(r'(#{1,6}\s*\[.*?\]\(.*?\))\s*(#{1,6})', r'\1\n\n\2', markdown_content)
+        # 見出し連結パターンを検出して修正
+        # ## [何か](URL)## [別の何か] を ## [何か](URL)\n\n## [別の何か] に変換
+        concatenated_pattern = r'(#{1,6}\s*\[[^\]]+\]\([^)]+\))(#{1,6}\s*\[)'
+        markdown_content = re.sub(concatenated_pattern, r'\1\n\n\2', markdown_content)
+
+        # リンク付き見出し同士が連続している場合
+        dup_pattern = r'(#{1,6}\s*\[[^\]]+\])\(([^)]+)\)(#{1,6}\s*\[)'
+        markdown_content = re.sub(dup_pattern, r'\1(\2)\n\n\3', markdown_content)
+
+        # 異なるレベルの見出し連結を処理
+        # ### 見出し## [別の見出し] を ### 見出し\n\n## [別の見出し] に変換
+        level_mix_pattern = r'(#{1,6}[^\n\#]{1,50})(#{1,6}\s*\[)'
+        markdown_content = re.sub(level_mix_pattern, r'\1\n\n\2', markdown_content)
+
+        # 空白を含む連結見出しを処理
+        # ## [何か](URL)    ## [別の何か] を ## [何か](URL)\n\n## [別の何か] に変換
+        spaced_pattern = r'(#{1,6}\s*\[[^\]]+\]\([^)]+\))\s{2,}(#{1,6})'
+        markdown_content = re.sub(spaced_pattern, r'\1\n\n\2', markdown_content)
+
+        # 見出し後の閉じない括弧のパターン
+        # ## [何か](https://example  ## [次] → ## [何か](https://example)\n\n## [次]
+        broken_pattern = r'(#{1,6}\s*\[[^\]]+\]\([^)#\n]{5,})\s+(#{1,6}\s*\[)'
+        markdown_content = re.sub(broken_pattern, r'\1)\n\n\2', markdown_content)
+
+        # 最終段階: 3つ以上の連続改行を2つに整理
+        markdown_content = re.sub(r'\n{3,}', '\n\n', markdown_content)
 
         # 連続する空白を1つに
         markdown_content = re.sub(r' {2,}', ' ', markdown_content)
@@ -973,8 +1004,16 @@ class MarkdownConverter:
         while i < len(lines):
             line = lines[i].strip()
 
-            # 単一行のJSONらしき構造を検出して整形
-            if (line.startswith('{') and line.endswith('}') and '"' in line and ':' in line and
+            # cURLコマンド内のJSONパラメータは整形しない
+            prev_line = lines[i-1].lower() if i > 0 else ""
+            current_line = lines[i].lower()
+
+            # curl内のJSONやdataパラメータをスキップする
+            is_curl_json = (('curl' in prev_line or '-d' in prev_line or '--data' in prev_line) and
+                           line.startswith('{') and line.endswith('}'))
+
+            # 単一行のJSONらしき構造を検出して整形（cURLコマンドは除外）
+            if (not is_curl_json and line.startswith('{') and line.endswith('}') and '"' in line and ':' in line and
                 len(line) > 10 and not line.startswith('```')):
                 try:
                     # JSONとして解析
@@ -1048,6 +1087,13 @@ class MarkdownConverter:
 
     def _improve_tables(self, markdown_content: str) -> str:
         """表組みのマークダウン表現を改善する（PDF出力向け強化版）"""
+        # 前処理: 表の前後に十分な改行を確保して表を分離する
+        markdown_content = re.sub(r'([^\n])\n(\|[^\n]+\|)', r'\1\n\n\2', markdown_content)
+        markdown_content = re.sub(r'(\|[^\n]+\|)\n([^\n])', r'\1\n\n\2', markdown_content)
+
+        # 見出し同士が連結している場合に分離する
+        markdown_content = re.sub(r'(#{1,6}[^\n]+)\n(#{1,6})', r'\1\n\n\2', markdown_content)
+
         # マークダウンの表を検出して改善
         table_pattern = r'(\|[^\n]+\|\n\|[-:| ]+\|\n(?:\|[^\n]+\|\n)+)'
 
