@@ -630,6 +630,16 @@ class MarkdownConverter:
         # ## [ Title](url)Description -> ## [ Title](url)\nDescription
         markdown_content = re.sub(r'(##\s*\[.*?\]\(https?://[^)]+\))([A-Za-z])', r'\1\n\2', markdown_content)
 
+        # 見出し内の不要な改行を削除
+        # ## [
+        # Text] -> ## [Text]
+        markdown_content = re.sub(r'(#{1,6})\s*\[\s*\n\s*([^\]]+)\]', r'\1 [\2]', markdown_content)
+
+        # 見出し自体の分割を修正
+        # ## Getting
+        # Started -> ## Getting Started
+        markdown_content = re.sub(r'(#{1,6}\s+[A-Za-z]+)\s*\n\s*([A-Za-z]+)', r'\1 \2', markdown_content)
+
         # 通常のリンクスタイルにも適用（サブレベルのヘッダーやリストでも改行）
         # リンク全体の独立性を保ち、その直後に説明文があれば区切る
         markdown_content = re.sub(r'(\]\(https?://[^)]+\))([A-Za-z])', r'\1\n\2', markdown_content)
