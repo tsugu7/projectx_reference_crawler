@@ -2,8 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """
-Webサイトクローラー（ローカル実行版）
-Google Colabノートブックのコードをベースにした、ローカル環境で実行できるバージョン
+Webサイトクローラー：同一ドメイン内のすべてのコンテンツをMarkdown形式で出力し、
+完了後にDiscordに通知を送信するプログラム
+前回からの差分検知機能付き
 """
 
 import requests
@@ -825,21 +826,11 @@ class PdfConverter:
             with open(html_path, 'w', encoding='utf-8') as f:
                 f.write(f"<html><head><meta charset='utf-8'></head><body>{html_content}</body></html>")
             
-            # PDFに変換（ローカル環境用の設定）
-            try:
-                # ローカルで wkhtmltopdf がパスに入っている場合
-                pdfkit.from_file(html_path, pdf_path)
-            except OSError:
-                # パスが通っていない場合は直接パスを指定する必要がある場合
-                # Windowsのデフォルトインストールパスを試す
-                win_path = r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
-                if os.name == 'nt' and os.path.exists(win_path):
-                    config = pdfkit.configuration(wkhtmltopdf=win_path)
-                    pdfkit.from_file(html_path, pdf_path, configuration=config)
-                else:
-                    # それでも失敗する場合はエラーメッセージを表示
-                    logging.error("wkhtmltopdf が見つかりません。インストールしてパスを通すか、コードを修正してパスを指定してください。")
-                    return None
+            # Google Colab用の設定（パスを指定）
+            config = pdfkit.configuration(wkhtmltopdf='/usr/bin/wkhtmltopdf')
+            
+            # wkhtmltopdfを使用してPDFに変換
+            pdfkit.from_file(html_path, pdf_path, configuration=config)
             
             # 一時ファイルを削除
             if os.path.exists(html_path):
@@ -1163,8 +1154,9 @@ class WebCrawler:
         return self.repository, diff_data
 
 
+# Google Colab用のメイン関数
 def run_crawler(url, max_pages=100, delay=1.0, output_dir="output", cache_dir="cache", discord_webhook=None, no_diff=False, skip_no_changes=False):
-    """クローラーを実行する関数（ローカル環境用）"""
+    """Google Colab向けのクローラー実行関数"""
     # ロガーの設定
     logging.basicConfig(
         level=logging.INFO,
@@ -1273,9 +1265,37 @@ def run_crawler(url, max_pages=100, delay=1.0, output_dir="output", cache_dir="c
         return None, None, None
 
 
-def main():
-    """メイン関数"""
-    # コマンドライン引数を解析
+# Colabで実行する場合は、以下のコードを実行してください
+# ---------------------------------------------------------
+# Google Driveのマウント
+# from google.colab import drive
+# drive.mount('/content/drive')
+
+# # クローラー用のディレクトリを作成
+# import os
+# crawler_dir = '/content/drive/MyDrive/website_crawler'
+# output_dir = os.path.join(crawler_dir, 'output')
+# cache_dir = os.path.join(crawler_dir, 'cache')
+
+# os.makedirs(crawler_dir, exist_ok=True)
+# os.makedirs(output_dir, exist_ok=True)
+# os.makedirs(cache_dir, exist_ok=True)
+
+# # クローラーの実行
+# markdown_path, pdf_path, diff_path = run_crawler(
+#     url="https://example.com",
+#     max_pages=100,
+#     delay=1.0,
+#     output_dir=output_dir,
+#     cache_dir=cache_dir,
+#     discord_webhook=None,
+#     no_diff=False,
+#     skip_no_changes=True
+# )
+
+# ローカル環境で実行する場合は、以下のコードを実行してください
+# ---------------------------------------------------------
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Web Crawler to export site content as Markdown with diff detection')
     parser.add_argument('url', help='URL to start crawling from')
     parser.add_argument('--max-pages', type=int, default=100, help='Maximum number of pages to crawl')
@@ -1288,29 +1308,34 @@ def main():
     
     args = parser.parse_args()
     
-    # クローラーを実行
-    md_path, pdf_path, diff_path = run_crawler(
-        url=args.url,
-        max_pages=args.max_pages,
-        delay=args.delay,
-        output_dir=args.output_dir,
-        cache_dir=args.cache_dir,
-        discord_webhook=args.discord_webhook,
-        no_diff=args.no_diff,
-        skip_no_changes=args.skip_no_changes
-    )
+    # Colabかローカル環境か自動判定して実行
+    try:
+        import google.colab
+        in_colab = True
+    except:
+        in_colab = False
     
-    # 結果を表示
-    if md_path:
-        print(f"\n処理が完了しました！")
-        print(f"\nMarkdownファイル: {md_path}")
-        if pdf_path:
-            print(f"PDFファイル: {pdf_path}")
-        if diff_path:
-            print(f"差分レポート: {diff_path}")
+    if in_colab:
+        print("Google Colab環境を検出しました。run_crawler関数を使用してください。")
     else:
-        print("\nエラーが発生したかクロールをスキップしました。ログを確認してください。")
-
-
-if __name__ == "__main__":
-    main()
+        # ローカル環境での実行
+        markdown_path, pdf_path, diff_path = run_crawler(
+            url=args.url,
+            max_pages=args.max_pages,
+            delay=args.delay,
+            output_dir=args.output_dir,
+            cache_dir=args.cache_dir,
+            discord_webhook=args.discord_webhook,
+            no_diff=args.no_diff,
+            skip_no_changes=args.skip_no_changes
+        )
+        
+        if markdown_path:
+            print(f"\n処理が完了しました！")
+            print(f"\nMarkdownファイル: {markdown_path}")
+            if pdf_path:
+                print(f"PDFファイル: {pdf_path}")
+            if diff_path:
+                print(f"差分レポート: {diff_path}")
+        else:
+            print("\nエラーが発生したかクロールをスキップしました。ログを確認してください。")
