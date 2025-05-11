@@ -468,7 +468,7 @@ class MarkdownConverter:
 
         except Exception as e:
             logging.error(f"Markdown conversion error for {url}: {e}")
-            markdown_content = f"Error converting content: {str(e)}"
+            markdown_content = f"コンテンツの変換中にエラーが発生しました: {str(e)}"
 
         # Markdownタイトルを作成
         markdown_title = f"# {title}\n\n"
@@ -477,7 +477,7 @@ class MarkdownConverter:
         meta_section = f"*{meta_description}*\n\n" if meta_description else ""
 
         # URL情報を追加
-        url_info = f"*Source: {url}*\n\n"
+        url_info = f"*出典: {url}*\n\n"
 
         # 最終的なMarkdownコンテンツを組み立て
         full_markdown = markdown_title + meta_section + url_info + markdown_content
@@ -1317,14 +1317,14 @@ class CrawlCache:
             cursor = conn.cursor()
             cursor.execute('SELECT markdown_content FROM pages WHERE url = ?', (url,))
             row = cursor.fetchone()
-        
+
         if not row:
             return "新規ページ"
-            
+
         old_content = row[0]
         if not old_content:
             return "前回のコンテンツが空"
-            
+
         # 差分を計算（コンテキスト形式、より多くのコンテキスト行を表示）
         diff = difflib.unified_diff(
             old_content.splitlines(),
@@ -1334,7 +1334,7 @@ class CrawlCache:
             lineterm='',
             n=3  # コンテキスト行数を3行に増加
         )
-        
+
         return '\n'.join(diff)
     
     def get_history(self, limit: int = 10) -> List[Dict]:
@@ -1362,30 +1362,30 @@ class FileExporter:
     def export_markdown(self, repository: ContentRepository, filename: str) -> str:
         """コンテンツをMarkdownファイルとしてエクスポートする"""
         contents = repository.get_all()
-        
+
         # 出力ファイルのパス
         output_path = os.path.join(self.output_dir, filename)
-        
+
         # コンテンツを目次付きでまとめる
         markdown_contents = []
-        
+
         # 目次の作成
         toc = ["# 目次\n"]
         for i, (url, page_data) in enumerate(sorted(contents.items()), 1):
-            title = page_data.get('title', 'No Title')
+            title = page_data.get('title', 'タイトルなし')
             toc.append(f"{i}. [{title}](#{self._make_anchor(title)})")
-        
+
         markdown_contents.append("\n".join(toc) + "\n\n---\n\n")
-        
+
         # 本文の追加
         for url, page_data in sorted(contents.items()):
             if 'markdown_content' in page_data:
                 markdown_contents.append(page_data['markdown_content'])
-            
+
         # ファイルに書き込む
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write('\n\n---\n\n'.join(markdown_contents))
-            
+
         return output_path
     
     def _make_anchor(self, text: str) -> str:
@@ -1399,12 +1399,12 @@ class FileExporter:
     def export_diff_report(self, diff_data: Dict, filename: str) -> str:
         """差分レポートをMarkdownファイルとして出力する（改善版）"""
         output_path = os.path.join(self.output_dir, filename)
-        
+
         with open(output_path, 'w', encoding='utf-8') as f:
             # レポートヘッダーとメタデータ
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             f.write(f"# 差分レポート - {now}\n\n")
-            
+
             # サマリー情報
             f.write("## サマリー\n\n")
             f.write(f"- 合計ページ数: {diff_data['total']}\n")
@@ -1417,28 +1417,28 @@ class FileExporter:
                 minutes, seconds = divmod(duration, 60)
                 f.write(f"- クロール時間: {minutes}分{seconds}秒\n")
             f.write("\n")
-            
+
             # 新規ページ
             if diff_data['new_pages']:
                 f.write("## 新規ページ\n\n")
                 for url in sorted(diff_data['new_pages']):
                     f.write(f"- [{url}]({url})\n")
                 f.write("\n")
-            
+
             # 更新ページ
             if diff_data['updated_pages']:
                 f.write("## 更新ページ\n\n")
                 for url in sorted(diff_data['updated_pages']):
                     f.write(f"- [{url}]({url})\n")
                 f.write("\n")
-            
+
             # 削除ページ
             if diff_data['deleted_pages']:
                 f.write("## 削除ページ\n\n")
                 for url in sorted(diff_data['deleted_pages']):
                     f.write(f"- {url}\n")
                 f.write("\n")
-            
+
             # 詳細な差分情報
             if diff_data.get('diffs'):
                 f.write("## 詳細な差分\n\n")
@@ -1447,18 +1447,18 @@ class FileExporter:
                     f.write("```diff\n")
                     f.write(diff)
                     f.write("\n```\n\n")
-        
+
         return output_path
     
     def export_summary(self, repository: ContentRepository, diff_data: Dict, filename: str) -> str:
         """クロール結果の概要レポートをエクスポートする"""
         output_path = os.path.join(self.output_dir, filename)
-        
+
         metadata = repository.get_metadata()
-        
+
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(f"# クロール概要レポート - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-            
+
             # クロール概要
             f.write("## クロール情報\n\n")
             f.write(f"- 開始時間: {metadata['start_time']}\n")
@@ -1470,13 +1470,13 @@ class FileExporter:
             f.write(f"- 成功: {metadata['success_count']}\n")
             f.write(f"- エラー: {metadata['error_count']}\n")
             f.write(f"- スキップ: {metadata['skipped_count']}\n\n")
-            
+
             # 差分概要
             f.write("## 変更概要\n\n")
             f.write(f"- 新規ページ: {len(diff_data['new_pages'])}\n")
             f.write(f"- 更新ページ: {len(diff_data['updated_pages'])}\n")
             f.write(f"- 削除ページ: {len(diff_data['deleted_pages'])}\n\n")
-            
+
             # エラーページのリスト
             error_urls = repository.get_urls_by_status('error')
             if error_urls:
@@ -1484,5 +1484,5 @@ class FileExporter:
                 for url in sorted(error_urls):
                     f.write(f"- {url}\n")
                 f.write("\n")
-        
+
         return output_path
