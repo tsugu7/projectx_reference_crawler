@@ -494,27 +494,64 @@ class MarkdownConverter:
             # lxmlを使用してHTMLを解析
             doc = lxml.html.fromstring(html_content)
 
+            # すべての特殊文字パターンを定義（より網羅的に）
+            special_chars = ['ðï', 'ðï¸', 'â', '\xa0', '\u2028', '\u2029']
+            emoji_pattern = re.compile(
+                "["
+                "\U0001F600-\U0001F64F"  # 絵文字
+                "\U0001F300-\U0001F5FF"  # シンボル
+                "\U0001F680-\U0001F6FF"  # 乗り物とマップ記号
+                "\U0001F700-\U0001F77F"  # 顔文字
+                "\U0001F780-\U0001F7FF"  # 絵文字の追加
+                "\U0001F800-\U0001F8FF"  # 絵文字の追加
+                "\U0001F900-\U0001F9FF"  # 絵文字の追加
+                "\U0001FA00-\U0001FA6F"  # 絵文字の追加
+                "\U0001FA70-\U0001FAFF"  # 絵文字の追加
+                "\U00002702-\U000027B0"  # その他のシンボル
+                "\U000024C2-\U0001F251"
+                "]+", flags=re.UNICODE
+            )
+
             # 「Direct link to」などの不要なテキストを含むa要素を修正
             for a_elem in doc.xpath('//a[contains(text(), "Direct link to")]'):
                 # テキストを空にする
                 a_elem.text = ""
 
-            # â などの特殊文字を含む要素を修正
-            for elem in doc.xpath('//*[contains(text(), "â")]'):
-                # テキストを置換
-                if elem.text:
-                    elem.text = elem.text.replace('â', '')
+            # スペーシング修正：見出し内の不要なスペースを調整
+            for h in doc.xpath('//h1 | //h2 | //h3 | //h4 | //h5 | //h6'):
+                if h.text:
+                    # 連続スペースを1つに置換
+                    h.text = re.sub(r'\s+', ' ', h.text).strip()
 
-            # ドキュメント全体から ðï¸ などの絵文字や特殊文字を削除（より徹底的なアプローチ）
+                    # 絵文字や特殊文字を削除
+                    h.text = emoji_pattern.sub('', h.text)
+                    for char in special_chars:
+                        h.text = h.text.replace(char, '')
+
+            # 見出し要素内のaタグを特別処理（見出しリンクを確実に処理）
+            for a in doc.xpath('//h1//a | //h2//a | //h3//a | //h4//a | //h5//a | //h6//a'):
+                if a.text:
+                    # 特殊文字を削除しつつスペースを調整
+                    a.text = re.sub(r'\s+', ' ', a.text).strip()
+                    a.text = emoji_pattern.sub('', a.text)
+                    for char in special_chars:
+                        a.text = a.text.replace(char, '')
+
+            # ドキュメント全体の特殊文字を処理
             for elem in doc.xpath('//*'):
                 # テキストノードをチェック
                 if elem.text:
+                    # 絵文字を削除
+                    elem.text = emoji_pattern.sub('', elem.text)
                     # 特殊文字を削除
-                    elem.text = elem.text.replace('ðï', '').replace('ðï¸', '')
+                    for char in special_chars:
+                        elem.text = elem.text.replace(char, '')
 
-                # テイルテキスト（要素と次の要素の間のテキスト）もチェック
+                # テイルテキストもチェック
                 if elem.tail:
-                    elem.tail = elem.tail.replace('ðï', '').replace('ðï¸', '')
+                    elem.tail = emoji_pattern.sub('', elem.tail)
+                    for char in special_chars:
+                        elem.tail = elem.tail.replace(char, '')
 
             # カテゴリページのフォーマットを修正（h2内の絵文字などを削除）
             for h2 in doc.xpath('//h2'):
@@ -522,46 +559,56 @@ class MarkdownConverter:
                 if h2.text and re.search(r'\d+\s*items', h2.text):
                     h2.text = re.sub(r'\d+\s*items', '', h2.text)
 
-            # リンクテキスト内の特殊文字を削除（アンカーなどを含む）
-            for a in doc.xpath('//a'):
-                if a.text and ('ðï' in a.text or 'ðï¸' in a.text):
-                    a.text = a.text.replace('ðï', '').replace('ðï¸', '')
-
-            # 表組みの整形を改善（table要素にクラスを追加）
+            # テーブル整形の改善
             for table in doc.xpath('//table'):
                 # Markdownでの表組み変換を改善するためのクラスを追加
                 table.attrib['class'] = 'markdown-table'
 
-                # テーブルのセルにあるスペースを調整
+                # テーブルのセルを整形
                 for cell in table.xpath('.//th | .//td'):
                     if cell.text:
                         cell.text = cell.text.strip()
-                        # セル内の特殊文字も削除
-                        cell.text = cell.text.replace('ðï', '').replace('ðï¸', '')
+                        cell.text = emoji_pattern.sub('', cell.text)
+                        for char in special_chars:
+                            cell.text = cell.text.replace(char, '')
 
-            # HTML文字列に戻す前に最終チェック - 絵文字コードのようなものをすべて削除
-            # すべてのテキストノードを取得してから文字列に戻す
-            # これによりまだ処理されていない特殊文字を徹底的に削除
-            for elem in doc.xpath('//*'):
+            # コードブロックの整形
+            for code in doc.xpath('//pre/code | //code'):
+                # コードブロック内のHTML実体参照を保持しておく
+                if code.text:
+                    # インデントと空白を保持しながら特殊文字のみ削除
+                    code.text = emoji_pattern.sub('', code.text)
+                    for char in special_chars:
+                        code.text = code.text.replace(char, '')
+
+            # 属性値も処理
+            for elem in doc.xpath('//*[@*]'):  # 属性を持つすべての要素
                 for attr_name in elem.attrib:
                     if isinstance(elem.attrib[attr_name], str):
-                        elem.attrib[attr_name] = elem.attrib[attr_name].replace('ðï', '').replace('ðï¸', '')
+                        # 特殊文字を削除
+                        elem.attrib[attr_name] = emoji_pattern.sub('', elem.attrib[attr_name])
+                        for char in special_chars:
+                            elem.attrib[attr_name] = elem.attrib[attr_name].replace(char, '')
 
+            # 最終的なセーフティネット - 不要な文字を削除
+            for elem in doc.xpath('//*'):
+                # テキストをUnicode正規化
                 if hasattr(elem, 'text') and elem.text:
-                    elem.text = re.sub(r'[^\x00-\x7F\u0080-\u00FF\u0100-\u017F\u0180-\u024F\u0370-\u03FF\u0400-\u04FF]+', '', elem.text)
+                    # 不要な特殊文字を削除
+                    elem.text = re.sub(r'[^\x00-\x7F\u0080-\u00FF\u0100-\u017F\u0180-\u024F\u0370-\u03FF\u0400-\u04FF\s\.,;:!?\-_\'\"\/\\\[\]\(\)\{\}\+\*\&\^\%\$\#\@<>=~`|]', '', elem.text)
 
                 if hasattr(elem, 'tail') and elem.tail:
-                    elem.tail = re.sub(r'[^\x00-\x7F\u0080-\u00FF\u0100-\u017F\u0180-\u024F\u0370-\u03FF\u0400-\u04FF]+', '', elem.tail)
+                    elem.tail = re.sub(r'[^\x00-\x7F\u0080-\u00FF\u0100-\u017F\u0180-\u024F\u0370-\u03FF\u0400-\u04FF\s\.,;:!?\-_\'\"\/\\\[\]\(\)\{\}\+\*\&\^\%\$\#\@<>=~`|]', '', elem.tail)
 
             # HTML文字列に戻す
             html_cleaned = lxml.html.tostring(doc, encoding='unicode')
 
-            # バイトで処理できる文字列表現に変換して、非ASCII文字を確実に処理
-            byte_html = html_cleaned.encode('ascii', 'ignore')
-            html_cleaned = byte_html.decode('ascii')
-
             # 最終的なセーフティネット：直接文字列置換で残っている可能性のある特殊文字を削除
-            html_cleaned = html_cleaned.replace('ðï', '').replace('ðï¸', '')
+            for char in special_chars:
+                html_cleaned = html_cleaned.replace(char, '')
+
+            # 複数の連続改行を整理
+            html_cleaned = re.sub(r'\n{3,}', '\n\n', html_cleaned)
 
             return html_cleaned
         except Exception as e:
@@ -571,300 +618,427 @@ class MarkdownConverter:
 
     def _postprocess_markdown(self, markdown_content: str) -> str:
         """Markdown変換後の後処理を行う"""
-        # 余分な空行を削除（3つ以上連続する改行を2つに縮小）
-        markdown_content = re.sub(r'\n{3,}', '\n\n', markdown_content)
+        # 処理順序を最適化 - 最初にダブルダッシュを処理
+        markdown_content = re.sub(r'\n--\n', '\n\n', markdown_content)
 
-        # 表組みの整形を改善
-        markdown_content = self._improve_tables(markdown_content)
+        # 特殊文字を先に削除
+        markdown_content = markdown_content.replace('â', '')
+        markdown_content = markdown_content.replace('ðï¸', '')
+        markdown_content = markdown_content.replace('ðï', '')
 
         # 「Direct link to」などの不要なテキストを削除
         markdown_content = re.sub(r'\[â\]\([^)]+\s+"Direct link to [^"]+"\)', '', markdown_content)
         markdown_content = re.sub(r'\[\]\([^)]+\s+"Direct link to [^"]+"\)', '', markdown_content)
         markdown_content = re.sub(r'\[[^\]]*\]\([^)]+\s+"Direct link to [^"]+"\)', '', markdown_content)
 
-        # 特殊文字を修正
-        markdown_content = markdown_content.replace('â', '')
-        markdown_content = markdown_content.replace('ðï¸', '')
-        markdown_content = markdown_content.replace('ðï', '')
+        # 見出し修正を優先的に先に処理 (重要: 他の変換の前に行う)
+        # 複数行にまたがる見出しを一行に結合
+        # 例: ## [
+        # Text] -> ## [Text]
+        for _ in range(3):
+            # 見出しタグの後の改行を修正
+            markdown_content = re.sub(r'(#{1,6})\s*\n\s*', r'\1 ', markdown_content)
+
+            # 見出しのリンク開始括弧内の改行を修正
+            markdown_content = re.sub(r'(#{1,6}\s*)\[\s*\n\s*', r'\1[', markdown_content)
+
+            # 見出しのリンクテキスト内の改行を修正
+            markdown_content = re.sub(r'(\[\s*[^\n\]]*)\n\s*([^\]]*\])', r'\1 \2', markdown_content)
+
+            # 見出しのリンク全体の途中改行を修正
+            markdown_content = re.sub(r'(#{1,6}\s+\[[^\]]+\])\s*\n\s*(\([^)]+\))', r'\1\2', markdown_content)
+
+            # 見出し全体が複数行に分かれている場合を修正
+            markdown_content = re.sub(r'(#{1,6}\s+[A-Za-z][^\n]*)\s*\n\s*([A-Za-z][^\n]*)', r'\1 \2', markdown_content)
+
+        # カテゴリページの見出しフォーマットを改善（特殊文字を削除しつつ）
+        markdown_content = re.sub(r'##\s*\[(ðï¸\s*)?([^\]]*?)(\s*\d+\s*items)?\]\(([^)]+)\)', r'## [\2](\4)', markdown_content)
+
+        # 見出し内のスペース調整
+        markdown_content = re.sub(r'(#{1,6})\s*\[ ', r'\1 [', markdown_content)
+
+        # マークダウンリンク内の特殊文字のみを置換
+        markdown_content = re.sub(r'\[ðï¸\s*([^\]]*?)(\s*\d+\s*items)?\]', r'[\1]', markdown_content)
+
+        # 見出し行内の特殊文字を削除（すべての見出しレベルに対応）
+        markdown_content = re.sub(r'(#{1,6})\s+\[(ðï¸?\s*)?([^\]]*?)\](\([^)]+\))', r'\1 [\3]\4', markdown_content)
+        markdown_content = re.sub(r'(#{1,4})\s*\[ðï¸?\s*([^\]]*)\]\(([^)]+)\)', r'\1 [\2](\3)', markdown_content)
+
+        # リンク後の説明文を適切に区切る処理（改良版）
+        # URL直後に続く説明文があれば改行して区切る
+        markdown_content = re.sub(r'(\]\([^)]+\))([\w])', r'\1\n\2', markdown_content)
+
+        # 見出し + URL + 説明文のパターンをより強固に処理
+        markdown_content = re.sub(r'(#{1,6}\s+\[[^\]]+\]\([^)]+\))\s+([A-Z][a-z])', r'\1\n\n\2', markdown_content)
+
+        # カテゴリページの説明文が見出しとリンクされている場合、適切に分離
+        markdown_content = re.sub(r'(#{1,6}\s*\[[^\]]+\]\([^)]+\))([A-Za-z])', r'\1\n\2', markdown_content)
+
+        # 連続するヘッダーの間に適切な空白を挿入
+        markdown_content = re.sub(r'(#{1,6}\s*\[.*?\]\(.*?\))\s*(#{1,6})', r'\1\n\n\2', markdown_content)
 
         # 連続する空白を1つに
         markdown_content = re.sub(r' {2,}', ' ', markdown_content)
 
-        # リスト項目の後の不要な改行を修正
+        # リスト項目の間隔を最適化
         markdown_content = re.sub(r'(\* .*)\n\n(?=\* )', r'\1\n', markdown_content)
-
-        # カテゴリページの見出しフォーマットを改善
-        # ヘッダーの中の"ðï¸"を削除
-        markdown_content = re.sub(r'##\s*\[(ðï¸\s*)?([^\]]*?)(\s*\d+\s*items)?\]\(([^)]+)\)', r'## [\2](\4)', markdown_content)
-
-        # マークダウンリンク内の特殊文字のみを置換
-        # [ðï¸ Something] の形式で特殊文字だけを削除し [Something] に変換
-        # カテゴリ情報などのテキストは保持
-        markdown_content = re.sub(r'\[ðï¸\s*([^\]]*?)(\s*\d+\s*items)?\]', r'[\1]', markdown_content)
-
-        # ## [ Text]の形式でスペースが余分に入っている場合を修正
-        markdown_content = re.sub(r'(#{1,6})\s*\[ ', r'\1 [', markdown_content)
-
-        # ##+ で始まる見出し行内の特殊文字を削除
-        markdown_content = re.sub(r'(#{1,6})\s+\[(ðï¸?\s*)?([^\]]*?)\](\([^)]+\))', r'\1 [\3]\4', markdown_content)
-
-        # 残りの特殊文字をすべてのリンクテキストから削除 (##, ###, #### のすべての見出しレベル)
-        markdown_content = re.sub(r'(#{1,4})\s*\[ðï¸?\s*([^\]]*)\]\(([^)]+)\)', r'\1 [\2](\3)', markdown_content)
-
-        # 連続するヘッダーの間に改行を追加
-        markdown_content = re.sub(r'(##\s*\[.*?\]\(.*?\))\s*(##)', r'\1\n\n\2', markdown_content)
-
-        # カテゴリページのリンクリストの間隔を調整
         markdown_content = re.sub(r'(\]\([^)]+\))\n\n(\*)', r'\1\n\2', markdown_content)
 
-        # カテゴリページの説明文が見出しとリンクされている場合、適切に分離
-        # ## [Placing Your First Order...](http://) のようなテキストを保持
-        markdown_content = re.sub(r'##\s*\[(.*?)\]\((.*?)\)(.*?)##', r'## [\1](\2)\n\3\n\n##', markdown_content)
-
-        # 見出し + リンク + 説明文のパターンを処理
-        # 例: ## [Title](url)Description
-        markdown_content = re.sub(r'(##\s*\[[^\]]+\]\([^)]+\))([A-Za-z])', r'\1\n\2', markdown_content)
-
-        # リンク内のテキストを保持しつつ、その直後に続く説明文を適切に改行
-        # URLの後に続く説明文があれば改行して区切る
-        # ## [ Title](url)Description -> ## [ Title](url)\nDescription
-        markdown_content = re.sub(r'(##\s*\[.*?\]\(https?://[^)]+\))([A-Za-z])', r'\1\n\2', markdown_content)
-
-        # 見出し内の不要な改行を削除
-        # ## [
-        # Text] -> ## [Text]
-        # 複数回実行して確実に対応
-        for _ in range(3):
-            markdown_content = re.sub(r'(#{1,6})\s*\[\s*\n\s*([^\]]+)\]', r'\1 [\2]', markdown_content)
-            # 見出し要素の途中改行も修正
-            markdown_content = re.sub(r'(\[.*?)\n(.*?\])', r'\1 \2', markdown_content)
-
-        # 見出し自体の分割を修正
-        # ## Getting
-        # Started -> ## Getting Started
-        # 複数回実行して確実に対応
-        for _ in range(3):
-            markdown_content = re.sub(r'(#{1,6}\s+[A-Za-z]+)\s*\n\s*([A-Za-z]+)', r'\1 \2', markdown_content)
-            # ##\nStarted -> ## Started も処理
-            markdown_content = re.sub(r'(#{1,6})\s*\n\s*([A-Za-z]+)', r'\1 \2', markdown_content)
-
-        # 通常のリンクスタイルにも適用（サブレベルのヘッダーやリストでも改行）
-        # リンク全体の独立性を保ち、その直後に説明文があれば区切る
-        markdown_content = re.sub(r'(\]\(https?://[^)]+\))([A-Za-z])', r'\1\n\2', markdown_content)
-
-        # 最後の手段として、明確なパターンのみを対象に特殊ケースを処理
-        markdown_content = re.sub(r'(\[[^\]]+\]\(https?://[^)]+\))([A-Z][a-z])', r'\1\n\2', markdown_content)
-
-        # 見出しの後で最初の単語が大文字始まりの場合に新しい段落として扱う
-        markdown_content = re.sub(r'(##\s*[^\n]+)([A-Z][a-z])', r'\1\n\2', markdown_content)
-
-        # 連続する ## が残っている場合は削除（最後の ## など）
+        # 見出しの後ろに不要な## マークが残っている場合は削除
         markdown_content = re.sub(r'##\s*$', '', markdown_content)
 
         # テーブル内の特殊文字も削除
         markdown_content = re.sub(r'\|(.*?)ðï¸(.*?)\|', r'|\1\2|', markdown_content)
         markdown_content = re.sub(r'\|(.*?)ðï(.*?)\|', r'|\1\2|', markdown_content)
 
-        # 残っている特殊文字を直接置換（最終セーフティネット）
-        markdown_content = markdown_content.replace('ðï¸', '')
-        markdown_content = markdown_content.replace('ðï', '')
+        # 表組みの整形を改善
+        markdown_content = self._improve_tables(markdown_content)
 
         # JSONやコードブロックを整形
         markdown_content = self._format_code_blocks(markdown_content)
 
-        # 非ASCII文字を確実に処理するための最終対策
-        # ASCII文字のみを許可（バイト操作でエンコード/デコード）
-        markdown_bytes = markdown_content.encode('ascii', 'ignore')
-        markdown_content = markdown_bytes.decode('ascii')
+        # 見出しの前後に適切な改行を追加して読みやすくする
+        markdown_content = re.sub(r'\n(#{1,6}\s+[^\n]+)\n', r'\n\1\n\n', markdown_content)
 
-        # ダブルダッシュを先に削除（-- を空行に置換）- 先に処理
-        markdown_content = re.sub(r'\n--\n', '\n\n', markdown_content)
+        # 複数見出しの間の余分な改行を修正（最大2行まで）
+        markdown_content = re.sub(r'(#{1,6}[^\n]+)\n\n\n+(#{1,6})', r'\1\n\n\2', markdown_content)
 
-        # 見出しの修正追加: 前後の余分な改行を整理
-        markdown_content = re.sub(r'\n(#{1,6}\s+[^\n]+)\n+', r'\n\1\n\n', markdown_content)
+        # 残っている特殊文字を最終的に削除（セーフティネット）
+        markdown_content = markdown_content.replace('ðï¸', '')
+        markdown_content = markdown_content.replace('ðï', '')
 
-        # 全体を整理（余分な改行を調整）
+        # コンテンツの区切りを明確にする（見出し間の区切り）
+        markdown_content = re.sub(r'(#{2,4}\s+[^\n]+)\n([^#\n])', r'\1\n\n\2', markdown_content)
+
+        # 非ASCII文字を確実に処理
+        try:
+            # まずはヘッダーや重要なセクションを保持する方法を試す
+            clean_content = ''
+            for line in markdown_content.splitlines():
+                # 見出し行やその他の重要なパターンは特別に処理
+                if re.match(r'^#{1,6}\s+', line) or '[' in line or '*' in line or '|' in line:
+                    # 不要な特殊文字だけを削除
+                    line = re.sub(r'[^\x00-\x7F\u0080-\u00FF\u0100-\u017F\u0180-\u024F\u0370-\u03FF\u0400-\u04FF\s\[\]\(\)\*\|\.,:;\'"!?-]', '', line)
+                else:
+                    # 一般のテキスト行はより厳密に処理
+                    line = re.sub(r'[^\x00-\x7F]', '', line)
+
+                clean_content += line + '\n'
+            markdown_content = clean_content
+        except Exception:
+            # エラーが発生した場合は単純に非ASCII文字を削除するフォールバック
+            markdown_bytes = markdown_content.encode('ascii', 'ignore')
+            markdown_content = markdown_bytes.decode('ascii')
+
+        # 全体的な整理（余分な改行を最終調整）
         markdown_content = re.sub(r'\n{3,}', '\n\n', markdown_content)
 
         return markdown_content
 
     def _format_code_blocks(self, markdown_content: str) -> str:
-        """コードブロックとJSONの整形を行う"""
-        # コードブロックを検出するパターン（既存のコードブロック）
-        code_block_pattern = r'```(?:json|javascript|python|bash|typescript|ts|js)?\s*\n(.*?)\n```'
+        """コードブロックとJSONの整形を行う（改良版）"""
+        # 既存コードブロックのパターン（より柔軟な対応）
+        code_block_pattern = r'```(?:json|javascript|js|typescript|ts|python|py|bash|sh|xml|html|css)?\s*\n(.*?)\n```'
 
-        # コードブロックでない複数行の整形（JSON候補）
-        multiline_pattern = r'(\s*\{\s*\n.*?\n\s*\}\s*\n)'
+        # コードとして扱うキーワードリスト（言語検出用）
+        code_keywords = {
+            'javascript': ['function', 'const', 'var', 'let', '=>', 'return', 'import ', 'export ', 'class ', 'extends'],
+            'typescript': ['interface', 'type ', 'enum ', 'namespace', '<T>', 'implements'],
+            'python': ['def ', 'class ', 'import ', 'from ', 'if __name__', 'return', 'self.', 'async def'],
+            'bash': ['#!/bin/bash', 'chmod', 'sudo ', 'apt ', 'yum ', 'grep ', 'awk ', 'sed '],
+            'json': ['":', '": ', '"name":', '"version":', '"dependencies":'],
+            'xml': ['<?xml', '<tag>', '</tag>', '<node ', '<element'],
+            'html': ['<!DOCTYPE', '<html>', '</html>', '<div>', '<span>', '<p>']
+        }
 
-        def format_code_block(match):
-            code = match.group(1)
-            language = match.group(0).split('```')[1].strip() if '```' in match.group(0) and match.group(0).split('```')[1].strip() else ''
-
-            # JSONの場合は整形を試みる
-            if language.lower() == 'json' or (not language and code.strip().startswith('{')):
+        def detect_language(code_text):
+            """コードブロックの言語を検出する"""
+            # JSON形式を優先的に検出
+            if code_text.strip().startswith('{') and code_text.strip().endswith('}') and ('"' in code_text or ':' in code_text):
                 try:
-                    # JSONとして解析して整形
-                    parsed_json = json.loads(code.strip())
-                    formatted_json = json.dumps(parsed_json, indent=2)
-                    return f"```json\n{formatted_json}\n```"
+                    # JSON構文として解析可能か確認
+                    # シングルクォートをダブルクォートに置換（JavaScriptスタイルをJSON対応にする）
+                    test_json = code_text.replace("'", '"').replace("//", "#")
+                    json.loads(test_json.strip())
+                    return 'json'
                 except:
                     pass
 
-            # インデントを揃え、余分な空白を削除
+            # 各言語の特徴的なキーワードを探す
+            for lang, keywords in code_keywords.items():
+                # いくつかのキーワードが存在するかチェック
+                matches = sum(1 for keyword in keywords if keyword in code_text.lower())
+                if matches >= 2:  # 2つ以上のキーワードがマッチしたら
+                    return lang
+
+            # 単一行の簡単な検出
+            code_lower = code_text.lower()
+            if 'function' in code_lower or 'const ' in code_lower or code_lower.count(';') > 2:
+                return 'javascript'
+            if code_lower.count('def ') > 0 or code_lower.count('import ') > 0:
+                return 'python'
+            if code_lower.count('<') > 2 and code_lower.count('>') > 2:
+                return 'html' if '<html' in code_lower or '<body' in code_lower else 'xml'
+
+            # 判別できない場合は空文字を返す
+            return ''
+
+        def format_code_block(match):
+            """コードブロックを整形する"""
+            code = match.group(1)
+            # 言語タグを取得（定義されていれば）
+            if '```' in match.group(0) and match.group(0).split('```')[1].strip():
+                language = match.group(0).split('```')[1].strip()
+            else:
+                language = ''
+
+            # 空のコードブロックは処理しない
+            if not code.strip():
+                return match.group(0)
+
+            # JSONの整形を試みる
+            if language.lower() == 'json' or (not language and (code.strip().startswith('{') and code.strip().endswith('}'))):
+                try:
+                    # シングルクォートをダブルクォートに置換（JavaScriptスタイルのJSONも対応）
+                    json_code = code.replace("'", '"').replace("//", "#")
+                    parsed_json = json.loads(json_code.strip())
+                    formatted_json = json.dumps(parsed_json, indent=2)
+                    return f"```json\n{formatted_json}\n```"
+                except:
+                    # JSON解析に失敗した場合は通常のコードとして処理
+                    if not language:
+                        language = detect_language(code)
+
+            # 言語が指定されていない場合は自動検出
+            if not language:
+                language = detect_language(code)
+
+            # コードのインデント整形
+            # 行頭の共通インデントを検出して削除
             lines = code.split('\n')
             if len(lines) > 1:
-                # 行頭の共通インデントを検出
-                common_indent = None
-                for line in lines:
-                    if line.strip():  # 空行は無視
-                        # 行頭の空白を数える
-                        indent = len(line) - len(line.lstrip())
-                        if common_indent is None or indent < common_indent:
-                            common_indent = indent
+                # 空でない行のみを対象に共通インデント検出
+                non_empty_lines = [line for line in lines if line.strip()]
+                if non_empty_lines:
+                    # 各行のインデント数を計算
+                    indents = [len(line) - len(line.lstrip()) for line in non_empty_lines]
+                    # 最小のインデント数を共通インデントとして使用
+                    common_indent = min(indents) if indents else 0
 
-                # 共通インデントを削除して整形
-                if common_indent and common_indent > 0:
-                    formatted_lines = []
-                    for line in lines:
-                        if line.strip():  # 空行は無視
-                            formatted_lines.append(line[common_indent:])
-                        else:
-                            formatted_lines.append(line)
+                    # 共通インデントを削除
+                    if common_indent > 0:
+                        formatted_lines = []
+                        for line in lines:
+                            if line.strip():  # 空行は無視
+                                # 共通インデント分だけ削除
+                                formatted_lines.append(line[common_indent:])
+                            else:
+                                formatted_lines.append(line)
 
-                    # 言語指定があれば保持、なければ自動検出を試みる
-                    if not language:
-                        if any(keyword in code.lower() for keyword in ['function', 'const', 'var', 'let', '=>']):
-                            language = 'javascript'
-                        elif any(keyword in code.lower() for keyword in ['def ', 'class ', 'import ', 'from ']):
-                            language = 'python'
+                        code = "\n".join(formatted_lines)
 
-                    lang_tag = language if language else ''
-                    return f"```{lang_tag}\n" + "\n".join(formatted_lines) + "\n```"
+            # 言語タグを準備（検出した言語または指定された言語）
+            lang_tag = language if language else ''
 
-            # PDFのフォーマットを改善するために前後に空行を入れる
-            return "\n" + match.group(0) + "\n"
+            # PDFフォーマット改善のため前後に空行を追加
+            return f"\n```{lang_tag}\n{code}\n```\n"
 
         # コードブロックを整形
         markdown_content = re.sub(code_block_pattern, format_code_block, markdown_content, flags=re.DOTALL)
 
-        # インラインのJSONを検出して整形（コードブロック以外）
-        inline_json_pattern = r'(\{\s*"[^"]+"\s*:(?:[^{}]|(?:\{\s*(?:[^{}]|(?:\{\s*[^{}]*\s*\}))*\s*\}))*\})'
-
-        def format_inline_json(match):
-            json_text = match.group(1)
-            try:
-                # 整形を試みる
-                parsed_json = json.loads(json_text)
-                formatted_json = json.dumps(parsed_json, indent=2)
-                return f"```json\n{formatted_json}\n```"
-            except:
-                return json_text
-
-        # インラインJSONの置換は慎重に（段落内のみ）
+        # インラインJSONの検出と整形（段落内の１行JSONなど）
         lines = markdown_content.split('\n')
         i = 0
         while i < len(lines):
-            # 1行のJSON形式を検出して整形
-            if len(lines[i]) > 5 and lines[i].strip().startswith('{') and lines[i].strip().endswith('}') and '"' in lines[i]:
+            line = lines[i].strip()
+
+            # 単一行のJSONらしき構造を検出して整形
+            if (line.startswith('{') and line.endswith('}') and '"' in line and ':' in line and
+                len(line) > 10 and not line.startswith('```')):
                 try:
-                    # JSONとして解析して整形
-                    json_text = lines[i].strip()
-                    parsed_json = json.loads(json_text)
+                    # JSONとして解析
+                    parsed_json = json.loads(line.replace("'", '"'))
+                    # 整形されたJSONを作成
                     formatted_json = json.dumps(parsed_json, indent=2)
+                    # コードブロックに置き換え
                     lines[i] = f"```json\n{formatted_json}\n```"
                 except:
-                    # JSONとして解析できない場合は元のまま
+                    # JSONではない場合はそのまま
                     pass
 
-            # コード部分のような連続した行を検出して整形
-            elif i < len(lines) - 3 and not lines[i].startswith('#') and not '](http' in lines[i] and (' { ' in lines[i] or lines[i].strip().endswith('{')):
-                start_idx = i
-                # JSONブロックの終わりを探す
-                block_content = []
-                is_code_block = True
-                j = i
+            # コードブロックっぽい連続した行を探す（ブレース開始など）
+            elif i < len(lines) - 2 and not lines[i].startswith('#') and not lines[i].startswith('```'):
+                # 開始ブレース・括弧があるかチェック
+                if (('{' in lines[i] and lines[i].strip().endswith('{')) or
+                    ('(' in lines[i] and lines[i].strip().endswith('('))):
 
-                while j < min(i + 30, len(lines)):  # 最大30行まで探索
-                    if '}' in lines[j] and j > i:
+                    # コードブロックの範囲を特定
+                    start_idx = i
+                    block_content = [lines[i]]
+                    matching_char = '}' if '{' in lines[i] else ')'
+
+                    # 終了ブレース・括弧を探す
+                    j = i + 1
+                    while j < min(i + 30, len(lines)):  # 最大30行までを探索範囲とする
+                        if matching_char in lines[j]:
+                            block_content.append(lines[j])
+                            end_idx = j
+                            break
                         block_content.append(lines[j])
-                        end_idx = j
-                        break
-                    block_content.append(lines[j])
-                    j += 1
-                else:
-                    is_code_block = False  # 終わりが見つからない
+                        j += 1
+                    else:
+                        # 終了文字が見つからなかった場合
+                        i += 1
+                        continue
 
-                if is_code_block and len(block_content) > 2:
-                    # コードブロックとして整形を試みる
+                    # コードブロックとしての整形を試みる
                     code_text = "\n".join(block_content)
 
-                    # JSONとしての整形を試みる
-                    try:
-                        # 余分な先頭と末尾の行を削除しつつ整形
-                        clean_code = code_text.strip()
-                        if "{" in clean_code and "}" in clean_code:
-                            # JSONブロックに変換する試み
-                            formatted_code = code_text.replace("'", '"')  # シングルクォートをダブルクォートに置き換え
-                            lines[start_idx] = f"```json\n{formatted_code}\n```"
+                    # 言語を自動検出
+                    language = detect_language(code_text)
 
-                            # 整形した分の行を削除
-                            for _ in range(end_idx - start_idx):
-                                if start_idx + 1 < len(lines):
-                                    lines.pop(start_idx + 1)
-
-                            # インデックスを更新
-                            i = start_idx
-                    except:
-                        # JSONでない場合はコードブロックとして整形
-                        language = "javascript" if any(keyword in code_text.lower() for keyword in ["function", "const", "var"]) else ""
+                    # JSONの場合は特別処理
+                    if language == 'json':
+                        try:
+                            # JavaScriptスタイルJSONをスタンダードJSONに変換
+                            json_code = code_text.replace("'", '"').replace("//", "#")
+                            parsed_json = json.loads(json_code.strip())
+                            formatted_json = json.dumps(parsed_json, indent=2)
+                            lines[start_idx] = f"```json\n{formatted_json}\n```"
+                        except:
+                            # 通常のコードブロックとして整形
+                            lines[start_idx] = f"```{language}\n{code_text}\n```"
+                    else:
+                        # 非JSONコードとして整形
                         lines[start_idx] = f"```{language}\n{code_text}\n```"
 
-                        # 整形した分の行を削除
-                        for _ in range(end_idx - start_idx):
-                            if start_idx + 1 < len(lines):
-                                lines.pop(start_idx + 1)
+                    # 整形した分の行を削除
+                    for _ in range(end_idx - start_idx):
+                        if start_idx + 1 < len(lines):
+                            lines.pop(start_idx + 1)
 
-                        # インデックスを更新
-                        i = start_idx
+                    # インデックス更新
+                    i = start_idx
 
             i += 1
 
+        # 行を結合して戻す
         return '\n'.join(lines)
 
     def _improve_tables(self, markdown_content: str) -> str:
-        """表組みのマークダウン表現を改善する"""
+        """表組みのマークダウン表現を改善する（PDF出力向け強化版）"""
         # マークダウンの表を検出して改善
         table_pattern = r'(\|[^\n]+\|\n\|[-:| ]+\|\n(?:\|[^\n]+\|\n)+)'
 
         def fix_table(match):
             table = match.group(1)
 
-            # 列の幅を揃える
+            # 空の表は処理しない
+            if not table.strip():
+                return table
+
+            # 行に分割
             lines = table.strip().split('\n')
             if len(lines) < 2:
                 return table
 
-            # 各行のセル数をカウント
-            cells_per_row = [line.count('|') - 1 for line in lines]
-            max_cells = max(cells_per_row)
+            # 各行のセル数と最大幅を計算
+            max_cells = 0
+            row_cells = []
 
-            # 各行を調整
-            for i in range(len(lines)):
-                cells = lines[i].split('|')
-                cells = [c.strip() for c in cells if c]  # 空のセルを削除
+            for line in lines:
+                # |で分割し、前後の空セルを取り除く
+                cells = [c.strip() for c in line.split('|')[1:-1]]
+                row_cells.append(cells)
+                max_cells = max(max_cells, len(cells))
 
-                # セルの足りない分を追加
-                while len(cells) < max_cells:
-                    cells.append('')
+            # 各列の最大文字幅を計算（見た目を整えるため）
+            col_widths = [0] * max_cells
+            for row in row_cells:
+                for i, cell in enumerate(row):
+                    if i < max_cells:
+                        col_widths[i] = max(col_widths[i], len(cell))
 
-                # 行を再構成
-                lines[i] = '| ' + ' | '.join(cells) + ' |'
+            # ヘッダー行を修正（2行目の区切り行）
+            if len(lines) > 1:
+                header_sep = []
+                for i, width in enumerate(col_widths):
+                    # 元の区切り行をチェックして左右寄せを保持
+                    align_marker = ""
+                    if i < len(row_cells[1]):
+                        cell = row_cells[1][i]
+                        if cell.startswith(':') and cell.endswith(':'):
+                            align_marker = ":"  # 中央寄せ
+                            col_sep = ':' + '-' * max(3, width) + ':'
+                        elif cell.startswith(':'):
+                            align_marker = ":"  # 左寄せ
+                            col_sep = ':' + '-' * max(3, width) + ' '
+                        elif cell.endswith(':'):
+                            align_marker = ":"  # 右寄せ
+                            col_sep = ' ' + '-' * max(3, width) + ':'
+                        else:
+                            col_sep = '-' * max(3, width + 2)  # デフォルト（左寄せ）
+                    else:
+                        col_sep = '-' * max(3, width + 2)  # 新しい列はデフォルト
 
-            # 修正された表を返す（PDF表示向けに前後に改行を追加）
-            return '\n' + '\n'.join(lines) + '\n\n'
+                    header_sep.append(col_sep)
+
+                # 区切り行を再構築
+                lines[1] = '|' + '|'.join(header_sep) + '|'
+
+            # 各行を再構築
+            formatted_lines = []
+            for i, row in enumerate(row_cells):
+                if i == 1:  # 区切り行はすでに処理済み
+                    continue
+
+                # 各セルを整形
+                formatted_cells = []
+                for j in range(max_cells):
+                    if j < len(row):
+                        cell = row[j]
+                        # セルの内容をクリーンアップ - 特殊文字を削除
+                        cell = re.sub(r'[^\x00-\x7F\s\.,;:!?\-_\'\"\/\\\[\]\(\)\{\}\+\*\&\^\%\$\#\@<>=~`|]', '', cell)
+                        formatted_cells.append(cell)
+                    else:
+                        # 足りないセルを空で追加
+                        formatted_cells.append('')
+
+                # 行を再構築
+                formatted_lines.append('| ' + ' | '.join(formatted_cells) + ' |')
+
+            # 区切り行を挿入
+            if len(formatted_lines) > 0:
+                formatted_lines.insert(1, lines[1])
+
+            # 修正された表を返す（PDF表示向けに前後に適切な余白を追加）
+            return '\n\n' + '\n'.join(formatted_lines) + '\n\n'
 
         # 表組みを修正
         markdown_content = re.sub(table_pattern, fix_table, markdown_content)
+
+        # シンプルな表のパターン（ヘッダーなし）も検出
+        simple_table_pattern = r'(\|[^\n]+\|\n(?:\|[^\n]+\|\n){2,})'
+
+        def fix_simple_table(match):
+            table = match.group(1)
+            lines = table.strip().split('\n')
+
+            # すでに整形済みの表は処理しない（区切り行がある場合）
+            if any(re.match(r'\|\s*[-:]+\s*\|', line) for line in lines):
+                return table
+
+            # ヘッダー区切り行を作成して挿入
+            header_line = lines[0]
+            cells_count = header_line.count('|') - 1
+            sep_line = '|' + '|'.join([' ----- ' for _ in range(cells_count)]) + '|'
+
+            # 新しい表を構築
+            new_table = [lines[0], sep_line] + lines[1:]
+            return '\n\n' + '\n'.join(new_table) + '\n\n'
+
+        # シンプルな表も修正
+        markdown_content = re.sub(simple_table_pattern, fix_simple_table, markdown_content)
 
         return markdown_content
 
