@@ -23,14 +23,18 @@ def fix_markdown_headings(file_path):
         # 見出し連結パターンを修正
         concatenated_pattern = r'(#{1,6}\s*\[[^\]]+\]\([^)]+\))(#{1,6}\s*\[)'
         content = re.sub(concatenated_pattern, r'\1\n\n\2', content)
-        
+
         # 異なるレベルの見出し連結を処理
         level_mix_pattern = r'(#{1,6}[^\n\#]{1,50})(#{1,6}\s*\[)'
         content = re.sub(level_mix_pattern, r'\1\n\n\2', content)
-        
+
         # 空白を含む連結見出しを処理
         spaced_pattern = r'(#{1,6}\s*\[[^\]]+\]\([^)]+\))\s{2,}(#{1,6})'
         content = re.sub(spaced_pattern, r'\1\n\n\2', content)
+
+        # 見出し後にテキストが続く特殊パターン
+        text_pattern = r'(#{1,6}\s+[A-Za-z][A-Za-z0-9\s]+)\s+([A-Z][a-z])'
+        content = re.sub(text_pattern, r'\1\n\n\2', content)
         
         # 変更がない場合は何もしない
         if content == original_content:
