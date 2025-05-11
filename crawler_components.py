@@ -633,12 +633,20 @@ class MarkdownConverter:
         # 見出し内の不要な改行を削除
         # ## [
         # Text] -> ## [Text]
-        markdown_content = re.sub(r'(#{1,6})\s*\[\s*\n\s*([^\]]+)\]', r'\1 [\2]', markdown_content)
+        # 複数回実行して確実に対応
+        for _ in range(3):
+            markdown_content = re.sub(r'(#{1,6})\s*\[\s*\n\s*([^\]]+)\]', r'\1 [\2]', markdown_content)
+            # 見出し要素の途中改行も修正
+            markdown_content = re.sub(r'(\[.*?)\n(.*?\])', r'\1 \2', markdown_content)
 
         # 見出し自体の分割を修正
         # ## Getting
         # Started -> ## Getting Started
-        markdown_content = re.sub(r'(#{1,6}\s+[A-Za-z]+)\s*\n\s*([A-Za-z]+)', r'\1 \2', markdown_content)
+        # 複数回実行して確実に対応
+        for _ in range(3):
+            markdown_content = re.sub(r'(#{1,6}\s+[A-Za-z]+)\s*\n\s*([A-Za-z]+)', r'\1 \2', markdown_content)
+            # ##\nStarted -> ## Started も処理
+            markdown_content = re.sub(r'(#{1,6})\s*\n\s*([A-Za-z]+)', r'\1 \2', markdown_content)
 
         # 通常のリンクスタイルにも適用（サブレベルのヘッダーやリストでも改行）
         # リンク全体の独立性を保ち、その直後に説明文があれば区切る
@@ -669,11 +677,14 @@ class MarkdownConverter:
         markdown_bytes = markdown_content.encode('ascii', 'ignore')
         markdown_content = markdown_bytes.decode('ascii')
 
+        # ダブルダッシュを先に削除（-- を空行に置換）- 先に処理
+        markdown_content = re.sub(r'\n--\n', '\n\n', markdown_content)
+
+        # 見出しの修正追加: 前後の余分な改行を整理
+        markdown_content = re.sub(r'\n(#{1,6}\s+[^\n]+)\n+', r'\n\1\n\n', markdown_content)
+
         # 全体を整理（余分な改行を調整）
         markdown_content = re.sub(r'\n{3,}', '\n\n', markdown_content)
-
-        # ダブルダッシュを削除（-- を空行に置換）
-        markdown_content = re.sub(r'\n--\n', '\n\n', markdown_content)
 
         return markdown_content
 
