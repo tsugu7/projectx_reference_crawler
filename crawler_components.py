@@ -642,8 +642,11 @@ class MarkdownConverter:
 
     def _format_code_blocks(self, markdown_content: str) -> str:
         """コードブロックとJSONの整形を行う"""
-        # コードブロックを検出するパターン
+        # コードブロックを検出するパターン（既存のコードブロック）
         code_block_pattern = r'```(?:json|javascript|python|bash|typescript|ts|js)?\s*\n(.*?)\n```'
+
+        # コードブロックでない複数行の整形（JSON候補）
+        multiline_pattern = r'(\s*\{\s*\n.*?\n\s*\}\s*\n)'
 
         def format_code_block(match):
             code = match.group(1)
@@ -711,9 +714,72 @@ class MarkdownConverter:
 
         # インラインJSONの置換は慎重に（段落内のみ）
         lines = markdown_content.split('\n')
-        for i, line in enumerate(lines):
-            if len(line) > 5 and line.strip().startswith('{') and line.strip().endswith('}') and '"' in line:
-                lines[i] = format_inline_json(re.match(r'(.*)', line))
+        i = 0
+        while i < len(lines):
+            # 1行のJSON形式を検出して整形
+            if len(lines[i]) > 5 and lines[i].strip().startswith('{') and lines[i].strip().endswith('}') and '"' in lines[i]:
+                try:
+                    # JSONとして解析して整形
+                    json_text = lines[i].strip()
+                    parsed_json = json.loads(json_text)
+                    formatted_json = json.dumps(parsed_json, indent=2)
+                    lines[i] = f"```json\n{formatted_json}\n```"
+                except:
+                    # JSONとして解析できない場合は元のまま
+                    pass
+
+            # コード部分のような連続した行を検出して整形
+            elif i < len(lines) - 3 and (' { ' in lines[i] or lines[i].strip().endswith('{')):
+                start_idx = i
+                # JSONブロックの終わりを探す
+                block_content = []
+                is_code_block = True
+                j = i
+
+                while j < min(i + 30, len(lines)):  # 最大30行まで探索
+                    if '}' in lines[j] and j > i:
+                        block_content.append(lines[j])
+                        end_idx = j
+                        break
+                    block_content.append(lines[j])
+                    j += 1
+                else:
+                    is_code_block = False  # 終わりが見つからない
+
+                if is_code_block and len(block_content) > 2:
+                    # コードブロックとして整形を試みる
+                    code_text = "\n".join(block_content)
+
+                    # JSONとしての整形を試みる
+                    try:
+                        # 余分な先頭と末尾の行を削除しつつ整形
+                        clean_code = code_text.strip()
+                        if "{" in clean_code and "}" in clean_code:
+                            # JSONブロックに変換する試み
+                            formatted_code = code_text.replace("'", '"')  # シングルクォートをダブルクォートに置き換え
+                            lines[start_idx] = f"```json\n{formatted_code}\n```"
+
+                            # 整形した分の行を削除
+                            for _ in range(end_idx - start_idx):
+                                if start_idx + 1 < len(lines):
+                                    lines.pop(start_idx + 1)
+
+                            # インデックスを更新
+                            i = start_idx
+                    except:
+                        # JSONでない場合はコードブロックとして整形
+                        language = "javascript" if any(keyword in code_text.lower() for keyword in ["function", "const", "var"]) else ""
+                        lines[start_idx] = f"```{language}\n{code_text}\n```"
+
+                        # 整形した分の行を削除
+                        for _ in range(end_idx - start_idx):
+                            if start_idx + 1 < len(lines):
+                                lines.pop(start_idx + 1)
+
+                        # インデックスを更新
+                        i = start_idx
+
+            i += 1
 
         return '\n'.join(lines)
 
