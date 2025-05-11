@@ -627,6 +627,9 @@ class MarkdownConverter:
         markdown_content = markdown_content.replace('ðï¸', '')
         markdown_content = markdown_content.replace('ðï', '')
 
+        # JSONやコードブロックを整形
+        markdown_content = self._format_code_blocks(markdown_content)
+
         # 非ASCII文字を確実に処理するための最終対策
         # ASCII文字のみを許可（バイト操作でエンコード/デコード）
         markdown_bytes = markdown_content.encode('ascii', 'ignore')
@@ -636,6 +639,83 @@ class MarkdownConverter:
         markdown_content = re.sub(r'\n{3,}', '\n\n', markdown_content)
 
         return markdown_content
+
+    def _format_code_blocks(self, markdown_content: str) -> str:
+        """コードブロックとJSONの整形を行う"""
+        # コードブロックを検出するパターン
+        code_block_pattern = r'```(?:json|javascript|python|bash|typescript|ts|js)?\s*\n(.*?)\n```'
+
+        def format_code_block(match):
+            code = match.group(1)
+            language = match.group(0).split('```')[1].strip() if '```' in match.group(0) and match.group(0).split('```')[1].strip() else ''
+
+            # JSONの場合は整形を試みる
+            if language.lower() == 'json' or (not language and code.strip().startswith('{')):
+                try:
+                    # JSONとして解析して整形
+                    parsed_json = json.loads(code.strip())
+                    formatted_json = json.dumps(parsed_json, indent=2)
+                    return f"```json\n{formatted_json}\n```"
+                except:
+                    pass
+
+            # インデントを揃え、余分な空白を削除
+            lines = code.split('\n')
+            if len(lines) > 1:
+                # 行頭の共通インデントを検出
+                common_indent = None
+                for line in lines:
+                    if line.strip():  # 空行は無視
+                        # 行頭の空白を数える
+                        indent = len(line) - len(line.lstrip())
+                        if common_indent is None or indent < common_indent:
+                            common_indent = indent
+
+                # 共通インデントを削除して整形
+                if common_indent and common_indent > 0:
+                    formatted_lines = []
+                    for line in lines:
+                        if line.strip():  # 空行は無視
+                            formatted_lines.append(line[common_indent:])
+                        else:
+                            formatted_lines.append(line)
+
+                    # 言語指定があれば保持、なければ自動検出を試みる
+                    if not language:
+                        if any(keyword in code.lower() for keyword in ['function', 'const', 'var', 'let', '=>']):
+                            language = 'javascript'
+                        elif any(keyword in code.lower() for keyword in ['def ', 'class ', 'import ', 'from ']):
+                            language = 'python'
+
+                    lang_tag = language if language else ''
+                    return f"```{lang_tag}\n" + "\n".join(formatted_lines) + "\n```"
+
+            # PDFのフォーマットを改善するために前後に空行を入れる
+            return "\n" + match.group(0) + "\n"
+
+        # コードブロックを整形
+        markdown_content = re.sub(code_block_pattern, format_code_block, markdown_content, flags=re.DOTALL)
+
+        # インラインのJSONを検出して整形（コードブロック以外）
+        inline_json_pattern = r'(\{\s*"[^"]+"\s*:(?:[^{}]|(?:\{\s*(?:[^{}]|(?:\{\s*[^{}]*\s*\}))*\s*\}))*\})'
+
+        def format_inline_json(match):
+            json_text = match.group(1)
+            try:
+                # 整形を試みる
+                parsed_json = json.loads(json_text)
+                formatted_json = json.dumps(parsed_json, indent=2)
+                return f"```json\n{formatted_json}\n```"
+            except:
+                return json_text
+
+        # インラインJSONの置換は慎重に（段落内のみ）
+        lines = markdown_content.split('\n')
+        for i, line in enumerate(lines):
+            if len(line) > 5 and line.strip().startswith('{') and line.strip().endswith('}') and '"' in line:
+                lines[i] = format_inline_json(re.match(r'(.*)', line))
+
+        return '\n'.join(lines)
 
     def _improve_tables(self, markdown_content: str) -> str:
         """表組みのマークダウン表現を改善する"""
@@ -666,8 +746,8 @@ class MarkdownConverter:
                 # 行を再構成
                 lines[i] = '| ' + ' | '.join(cells) + ' |'
 
-            # 修正された表を返す
-            return '\n'.join(lines) + '\n'
+            # 修正された表を返す（PDF表示向けに前後に改行を追加）
+            return '\n' + '\n'.join(lines) + '\n\n'
 
         # 表組みを修正
         markdown_content = re.sub(table_pattern, fix_table, markdown_content)
