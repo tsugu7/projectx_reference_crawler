@@ -634,6 +634,12 @@ class MarkdownConverter:
         # リンク全体の独立性を保ち、その直後に説明文があれば区切る
         markdown_content = re.sub(r'(\]\(https?://[^)]+\))([A-Za-z])', r'\1\n\2', markdown_content)
 
+        # 最後の手段として、明確なパターンのみを対象に特殊ケースを処理
+        markdown_content = re.sub(r'(\[[^\]]+\]\(https?://[^)]+\))([A-Z][a-z])', r'\1\n\2', markdown_content)
+
+        # 見出しの後で最初の単語が大文字始まりの場合に新しい段落として扱う
+        markdown_content = re.sub(r'(##\s*[^\n]+)([A-Z][a-z])', r'\1\n\2', markdown_content)
+
         # 連続する ## が残っている場合は削除（最後の ## など）
         markdown_content = re.sub(r'##\s*$', '', markdown_content)
 
