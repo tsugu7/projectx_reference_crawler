@@ -537,19 +537,42 @@ class MarkdownConverter:
                     for char in special_chars:
                         a.text = a.text.replace(char, '')
 
-            # ドキュメント全体の特殊文字を処理
+            # ドキュメント全体の特殊文字を処理 - 強化版
+            # 特に見出し要素を優先して処理
+            for h in doc.xpath('//h1 | //h2 | //h3 | //h4 | //h5 | //h6'):
+                # 見出し内のすべてのテキストを徹底的にチェック
+                if h.text:
+                    # 絵文字と特殊文字をすべて削除
+                    h.text = emoji_pattern.sub('', h.text)
+                    # 特定の特殊文字を明示的に削除
+                    h.text = h.text.replace('ðï', '').replace('ðï¸', '')
+                    # その他の特殊文字
+                    for char in special_chars:
+                        h.text = h.text.replace(char, '')
+
+                # 見出し内のすべての子要素も徹底的にチェック
+                for child in h.xpath('.//*'):
+                    if child.text:
+                        child.text = emoji_pattern.sub('', child.text)
+                        child.text = child.text.replace('ðï', '').replace('ðï¸', '')
+                        for char in special_chars:
+                            child.text = child.text.replace(char, '')
+
+            # ドキュメント全体の特殊文字を処理（残りの要素）
             for elem in doc.xpath('//*'):
                 # テキストノードをチェック
                 if elem.text:
                     # 絵文字を削除
                     elem.text = emoji_pattern.sub('', elem.text)
                     # 特殊文字を削除
+                    elem.text = elem.text.replace('ðï', '').replace('ðï¸', '')
                     for char in special_chars:
                         elem.text = elem.text.replace(char, '')
 
                 # テイルテキストもチェック
                 if elem.tail:
                     elem.tail = emoji_pattern.sub('', elem.tail)
+                    elem.tail = elem.tail.replace('ðï', '').replace('ðï¸', '')
                     for char in special_chars:
                         elem.tail = elem.tail.replace(char, '')
 
@@ -666,9 +689,21 @@ class MarkdownConverter:
         # マークダウンリンク内の特殊文字のみを置換
         markdown_content = re.sub(r'\[ðï¸\s*([^\]]*?)(\s*\d+\s*items)?\]', r'[\1]', markdown_content)
 
-        # 見出し行内の特殊文字を削除（すべての見出しレベルに対応）
-        markdown_content = re.sub(r'(#{1,6})\s+\[(ðï¸?\s*)?([^\]]*?)\](\([^)]+\))', r'\1 [\3]\4', markdown_content)
-        markdown_content = re.sub(r'(#{1,4})\s*\[ðï¸?\s*([^\]]*)\]\(([^)]+)\)', r'\1 [\2](\3)', markdown_content)
+        # 見出し行内の特殊文字を削除（すべての見出しレベルに対応） - より強力なパターン
+        # 複数のパターンを試して確実に削除
+        for _ in range(2):  # 複数回適用して確実に削除
+            # パターン1: 見出し + [ðï¸? + テキスト] + (URL)
+            markdown_content = re.sub(r'(#{1,6})\s+\[(ðï¸?\s*)?([^\]]*?)\](\([^)]+\))', r'\1 [\3]\4', markdown_content)
+
+            # パターン2: 見出し + [ðï + テキスト] + (URL)
+            markdown_content = re.sub(r'(#{1,6})\s*\[ðï\s*([^\]]*)\]\(([^)]+)\)', r'\1 [\2](\3)', markdown_content)
+
+            # パターン3: 見出し + [ðï¸ + テキスト] + (URL)
+            markdown_content = re.sub(r'(#{1,6})\s*\[ðï¸\s*([^\]]*)\]\(([^)]+)\)', r'\1 [\2](\3)', markdown_content)
+
+            # すべての見出し内のリンクテキスト内にある特殊文字を強制的に削除
+            markdown_content = re.sub(r'(#{1,6}\s+\[)([^\]]*?)(ðï¸?)([^\]]*?)(\]\([^)]+\))', r'\1\2\4\5', markdown_content)
+            markdown_content = re.sub(r'(#{1,6}\s+\[)([^\]]*?)(ðï)([^\]]*?)(\]\([^)]+\))', r'\1\2\4\5', markdown_content)
 
         # 任意のリンクパターンの修正 - 特に見出し以外の場所にある分割されたリンク
         # 例: [Search    for    PositionsAPI    URL:    /api/Position/search\n Open](...) のような場合
@@ -748,9 +783,20 @@ class MarkdownConverter:
         # 複数見出しの間の余分な改行を修正（最大2行まで）
         markdown_content = re.sub(r'(#{1,6}[^\n]+)\n\n\n+(#{1,6})', r'\1\n\n\2', markdown_content)
 
-        # 残っている特殊文字を最終的に削除（セーフティネット）
+        # 残っている特殊文字を最終的に削除（セーフティネット）- 強化版
+        # 特殊文字を直接削除
         markdown_content = markdown_content.replace('ðï¸', '')
         markdown_content = markdown_content.replace('ðï', '')
+
+        # 見出し行をすべて抽出して特殊文字を除去（最終的な手段）
+        lines = markdown_content.splitlines()
+        for i, line in enumerate(lines):
+            if line.startswith('#'):
+                # 見出し行から特殊文字パターンを強制的に削除
+                lines[i] = re.sub(r'ðï[¸]?', '', line)
+
+        # 処理後の行を結合
+        markdown_content = '\n'.join(lines)
 
         # コンテンツの区切りを明確にする（見出し間の区切り）
         markdown_content = re.sub(r'(#{2,4}\s+[^\n]+)\n([^#\n])', r'\1\n\n\2', markdown_content)
