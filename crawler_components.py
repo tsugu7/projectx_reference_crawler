@@ -622,6 +622,9 @@ class MarkdownConverter:
         # 例: ## [Title](url)Description
         markdown_content = re.sub(r'(##\s*\[[^\]]+\]\([^)]+\))([A-Za-z])', r'\1\n\2', markdown_content)
 
+        # リンク内のテキストを保持しつつ、その直後に続く説明文を適切に改行
+        markdown_content = re.sub(r'(\]\(https?://[^)]+\))([A-Za-z])', r'\1\n\2', markdown_content)
+
         # 連続する ## が残っている場合は削除（最後の ## など）
         markdown_content = re.sub(r'##\s*$', '', markdown_content)
 
@@ -643,6 +646,9 @@ class MarkdownConverter:
 
         # 全体を整理（余分な改行を調整）
         markdown_content = re.sub(r'\n{3,}', '\n\n', markdown_content)
+
+        # ダブルダッシュを削除（-- を空行に置換）
+        markdown_content = re.sub(r'\n--\n', '\n\n', markdown_content)
 
         return markdown_content
 
