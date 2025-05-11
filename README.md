@@ -2,7 +2,7 @@
 
 ## 概要
 
-このWebサイトクローラーは、指定したURLから始めて同一ドメイン内のWebページを自動的にクロールし、コンテンツをMarkdown形式で保存します。前回のクロール結果との差分を検出し、変更点をレポートする機能も備えています。Google Colab環境での実行に対応し、Python環境でのスタンドアロン実行も可能です。
+このWebサイトクローラーは、指定したURLから始めて同一ドメイン内のWebページを自動的にクロールし、コンテンツをMarkdown形式で保存します。前回のクロール結果との差分を検出し、変更点をレポートする機能も備えています。HTML→Markdown変換中に発生する様々な形式問題（特殊文字、連結見出し、リンク形式など）を自動的に修正する機能を搭載しています。Google Colab環境での実行に対応し、Python環境でのスタンドアロン実行も可能です。
 
 **【注意】実行方法の詳細については [CRAWLER_USAGE.md](./CRAWLER_USAGE.md) を参照してください。**
 
@@ -16,6 +16,13 @@
 - **Google Drive連携**: クロール結果やキャッシュの永続的保存
 - **サイトマップ生成**: クロールしたページからサイトマップXMLを自動生成
 - **詳細なレポート**: 変更点や統計情報の包括的なレポート
+- **Markdown修正機能**: 以下の問題を自動的に修正
+  - 特殊文字「ðï」「ðï¸」の除去
+  - 連結見出しの修正（「## [A]()## [B]()」→「## [A]()\n\n## [B]()」）
+  - 見出し内のテキスト結合問題の修正（「## Getting Started ProjectX Trading」）
+  - リンクの修正（改行を含むリンク、エンコードされた文字を含むリンク）
+  - コードブロック・JSON形式の整形
+  - テーブル形式の整形
 
 ## 要件
 
@@ -51,7 +58,7 @@
 
 ### Google Colabでの使用
 
-1. `website_crawler_improved.ipynb` をGoogle Colabにアップロード
+1. `website_crawler_colab.ipynb` をGoogle Colabにアップロード
 2. ノートブック内の指示に従って実行
 
 ## 使用方法
@@ -67,6 +74,9 @@ python crawler_script.py --url https://example.com --pages 200 --delay 1.5 --wor
 
 # 設定ファイルを使用
 python crawler_script.py --config my_config.json
+
+# クリーンなキャッシュから実行（前回の結果を保持しつつ新しくクロール）
+./run_fresh_crawler.sh https://example.com
 ```
 
 ### 設定ファイルを作成
@@ -89,19 +99,19 @@ python crawler_config_util.py samples
 
 ```bash
 # Webサイトの変更を監視
-python crawler_use_cases.py monitor https://example.com
+python crawler_use_case.py monitor https://example.com
 
 # サイト全体をアーカイブ
-python crawler_use_cases.py archive https://example.com
+python crawler_use_case.py archive https://example.com
 
 # サイトマップを生成
-python crawler_use_cases.py sitemap https://example.com
+python crawler_use_case.py sitemap https://example.com
 
 # ブログ・ニュースサイト向け
-python crawler_use_cases.py blog https://example.com
+python crawler_use_case.py blog https://example.com
 
 # ドキュメントサイト向け
-python crawler_use_cases.py docs https://example.com
+python crawler_use_case.py docs https://example.com
 ```
 
 ### Google Colabでの実行
@@ -173,11 +183,13 @@ python crawler_use_cases.py docs https://example.com
 - **`crawler_advanced.py`**: 拡張機能と非同期処理エンジン
 - **`crawler_script.py`**: コマンドライン実行用スクリプト
 - **`crawler_config_util.py`**: 設定管理ユーティリティ
-- **`crawler_use_cases.py`**: 特定ユースケース向けスクリプト
-- **`test_crawler.py`**: テストスイート
-- **`website_crawler_improved.ipynb`**: Google Colab用ノートブック
+- **`crawler_use_case.py`**: 特定ユースケース向けスクリプト
+- **`heading_fixer.py`**: 連結見出し修正ユーティリティ
+- **`fix_markdown.py`**: Markdownファイル修正スクリプト
+- **`website_crawler_colab.ipynb`**: Google Colab用ノートブック
 - **`run_crawler.sh`**: 基本的なクローリングスクリプト
 - **`run_crawler_advanced.sh`**: 高度なオプション指定が可能なクローリングスクリプト
+- **`run_fresh_crawler.sh`**: キャッシュクリア版クローリングスクリプト
 - **`CRAWLER_USAGE.md`**: クローラーの詳細な使用方法
 
 ## 差分検知について
@@ -189,6 +201,59 @@ python crawler_use_cases.py docs https://example.com
 - **削除ページ**: 前回は存在したが、今回は見つからなかったページ
 
 差分レポートには、URL一覧と、更新ページの詳細な差分（diff形式）が含まれます。
+
+## Markdown修正機能
+
+本クローラーには以下のMarkdown修正機能が搭載されています:
+
+### 連結見出しの修正
+
+連結見出し問題とは、以下のような見出しが正しく改行されない問題です:
+
+```
+## [最初のセクション](https://example.com/first)## [次のセクション](https://example.com/second)
+```
+
+これを以下のように修正します:
+
+```
+## [最初のセクション](https://example.com/first)
+
+## [次のセクション](https://example.com/second)
+```
+
+### 見出し内テキスト結合問題の修正
+
+見出しの後に適切な改行なしでテキストが続く問題を修正します:
+
+```
+## Getting Started ProjectX Trading
+このテキストは見出しと結合してしまっています
+```
+
+これを以下のように修正します:
+
+```
+## Getting Started ProjectX Trading
+
+このテキストは見出しと結合してしまっています
+```
+
+### 特殊文字の除去
+
+ドキュメント内の不要な特殊文字「ðï」「ðï¸」を自動的に除去します。
+
+### リンク形式の修正
+
+改行を含むリンクや、エンコードされた文字を含むURLを自動的に修正します。
+
+### コードブロックとJSONの整形
+
+コードブロックを検出して適切に整形し、言語ヒントを追加します。JSON形式のコードは自動的に整形されます（ただしcURLコマンド内のJSONは除く）。
+
+### テーブル形式の修正
+
+テーブルの行と列の幅を整え、セル内の空白を調整します。
 
 ## 定期実行の設定
 
@@ -257,6 +322,16 @@ self.exclude_patterns = [
 
 `crawler_advanced.py` の `PdfConverter` クラスの `default_css` を編集するか、外部CSSファイルを指定することで、PDF出力のスタイルをカスタマイズできます。
 
+### Markdown修正機能のカスタマイズ
+
+`heading_fixer.py` の正規表現パターンを編集することで、特定の問題に対応する修正を追加できます:
+
+```python
+# 見出し後にテキストが続く新しいパターンを追加
+pattern5 = r'(\#{1,6}\s+[^\n]+)\s+([A-Za-z][a-z0-9]+)'
+markdown_content = re.sub(pattern5, r'\1\n\n\2', markdown_content)
+```
+
 ## 応用例
 
 ### ウェブサイトの監視システム
@@ -264,7 +339,7 @@ self.exclude_patterns = [
 サイトの変更を監視し、変更があった場合のみDiscordに通知します。
 
 ```bash
-python crawler_use_cases.py monitor https://example.com --discord https://discord.com/api/webhooks/your-webhook
+python crawler_use_case.py monitor https://example.com --discord https://discord.com/api/webhooks/your-webhook
 ```
 
 ### コンテンツアーカイブ
@@ -272,7 +347,7 @@ python crawler_use_cases.py monitor https://example.com --discord https://discor
 Webサイト全体をアーカイブします。
 
 ```bash
-python crawler_use_cases.py archive https://example.com
+python crawler_use_case.py archive https://example.com
 ```
 
 ### サイトマップ生成
@@ -280,7 +355,7 @@ python crawler_use_cases.py archive https://example.com
 サイトマップを生成するための最小構成です。
 
 ```bash
-python crawler_use_cases.py sitemap https://example.com
+python crawler_use_case.py sitemap https://example.com
 ```
 
 ## トラブルシューティング
@@ -302,6 +377,11 @@ python crawler_use_cases.py sitemap https://example.com
 - `max_pages`の値を小さくする
 - `max_workers`の値を小さくする
 
+### Markdown変換の問題
+
+- 特定のHTML要素が正しく変換されない場合は、`_preprocess_html`または`_postprocess_markdown`メソッドをカスタマイズ
+- 見出し修正に関する問題は`heading_fixer.py`の正規表現パターンを調整
+
 ## API
 
 主要なクラスは以下の通りです:
@@ -317,3 +397,4 @@ python crawler_use_cases.py sitemap https://example.com
 - `PdfConverter`: MarkdownをPDFに変換
 - `DiscordNotifier`: Discord通知を送信
 - `AsyncCrawler`: 非同期クロールエンジン
+- `fix_concatenated_headings`: 連結見出しを修正する関数

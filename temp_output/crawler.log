@@ -1,0 +1,13 @@
+2025-05-11 18:18:38,466 - INFO - 進捗: 0/1 (0.0%) 完了 - 処理速度: 0.00 ページ/秒
+2025-05-11 18:18:48,481 - INFO - 進捗: 11/19 (57.9%) 完了 - 処理速度: 1.10 ページ/秒
+2025-05-11 18:18:58,484 - INFO - 進捗: 21/30 (70.0%) 完了 - 処理速度: 1.05 ページ/秒
+2025-05-11 18:19:06,642 - INFO - 進捗: 29/30 (96.7%) 完了 - 処理速度: 1.03 ページ/秒
+2025-05-11 18:19:08,990 - INFO - クロールが完了しました。訪問したURL数: 30、保存したページ数: 30。
+2025-05-11 18:19:08,990 - INFO - 変更点: 新規: 30、更新: 0、削除: 0。
+2025-05-11 18:19:08,994 - INFO - Exported Markdown to ./temp_output/gateway.docs.projectx.com.md
+2025-05-11 18:19:09,008 - INFO - Exported diff report to ./temp_output/gateway.docs.projectx.com_diff_report.md
+2025-05-11 18:19:09,010 - INFO - Exported summary to ./temp_output/gateway.docs.projectx.com_summary.md
+2025-05-11 18:19:09,862 - INFO - Exported PDF to ./temp_output/gateway.docs.projectx.com.pdf
+2025-05-11 18:19:10,263 - INFO - Exported diff report PDF to ./temp_output/gateway.docs.projectx.com_diff_report.pdf
+2025-05-11 18:19:10,275 - INFO - Generated sitemap at ./temp_output/sitemap-gateway.docs.projectx.com.xml
+2025-05-11 18:19:10,275 - INFO - 処理が正常に完了しました

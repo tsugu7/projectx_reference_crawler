@@ -1,0 +1,20 @@
+ビジュアルクローリング開始: Sun May 11 21:07:55 JST 2025
+ビジュアルモードでクローラーを実行しています...
+設定ファイルを読み込みました: ./visual_output/visual_config.json
+
+クロールを開始します: https://gateway.docs.projectx.com/docs/getting-started
+実行時刻: 2025-05-11 21:08:01
+最大ページ数: 10、遅延時間: 2.0秒、並列数: 1
+出力先: ./visual_output
+
+エラーが発生したか、クロールをスキップしました。ログファイルを確認してください。
+ログファイル: ./visual_output/crawler.log
+連結見出しを修正しています...
+ビジュアルクローリング完了: Sun May 11 21:08:31 JST 2025
+出力ファイルは ./visual_output ディレクトリに保存されました
+生成されたファイル:
+total 12K
+-rw-r--r-- 1 janwon_k janwon_k 1.2K May 11 21:08 crawler.log
+-rw-r--r-- 1 janwon_k janwon_k  830 May 11 21:08 crawler_config_used.json
+-rw-r--r-- 1 janwon_k janwon_k  303 May 11 21:07 visual_config.json
+-rw-r--r-- 1 janwon_k janwon_k  822 May 11 21:08 visual_crawler_run.log

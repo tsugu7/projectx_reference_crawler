@@ -1,0 +1,11 @@
+2025-05-11 21:08:01,781 - INFO - 進捗: 0/1 (0.0%) 完了 - 処理速度: 0.00 ページ/秒
+2025-05-11 21:08:03,289 - WARNING - Failed to fetch https://gateway.docs.projectx.com/docs/getting-started: status code 403
+2025-05-11 21:08:07,952 - WARNING - Failed to fetch https://gateway.docs.projectx.com/docs/getting-started: status code 403
+2025-05-11 21:08:11,836 - INFO - 進捗: 1/1 (100.0%) 完了 - 処理速度: 0.10 ページ/秒
+2025-05-11 21:08:14,567 - WARNING - Failed to fetch https://gateway.docs.projectx.com/docs/getting-started: status code 403
+2025-05-11 21:08:19,890 - INFO - 進捗: 1/1 (100.0%) 完了 - 処理速度: 0.06 ページ/秒
+2025-05-11 21:08:29,980 - INFO - 進捗: 1/1 (100.0%) 完了 - 処理速度: 0.04 ページ/秒
+2025-05-11 21:08:31,292 - WARNING - Failed to fetch https://gateway.docs.projectx.com/docs/getting-started: status code 403
+2025-05-11 21:08:31,327 - INFO - クロールが完了しました。訪問したURL数: 1、保存したページ数: 1。
+2025-05-11 21:08:31,328 - INFO - 変更点: 新規: 0、更新: 0、削除: 0。
+2025-05-11 21:08:31,328 - INFO - No changes detected. Skipping file generation and notification.

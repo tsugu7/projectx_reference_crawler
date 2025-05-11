@@ -1,0 +1,8 @@
+2025-05-11 17:30:19,148 - INFO - 進捗: 0/1 (0.0%) 完了 - 処理速度: 0.00 ページ/秒
+2025-05-11 17:30:21,952 - INFO - クロールが完了しました。訪問したURL数: 3、保存したページ数: 3。
+2025-05-11 17:30:21,952 - INFO - 変更点: 新規: 0、更新: 0、削除: 0。
+2025-05-11 17:30:21,955 - INFO - Exported Markdown to ./newest_output/gateway.docs.projectx.com.md
+2025-05-11 17:30:21,957 - INFO - Exported summary to ./newest_output/gateway.docs.projectx.com_summary.md
+2025-05-11 17:30:22,636 - INFO - Exported PDF to ./newest_output/gateway.docs.projectx.com.pdf
+2025-05-11 17:30:22,647 - INFO - Generated sitemap at ./newest_output/sitemap-gateway.docs.projectx.com.xml
+2025-05-11 17:30:22,648 - INFO - 処理が正常に完了しました

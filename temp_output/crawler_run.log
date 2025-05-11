@@ -1,0 +1,36 @@
+クロール開始: Sun May 11 18:18:36 JST 2025
+クローラーを実行しています...
+
+クロールを開始します: https://gateway.docs.projectx.com/
+実行時刻: 2025-05-11 18:18:38
+最大ページ数: 200、遅延時間: 1.0秒、並列数: 5
+出力先: ./temp_output
+
+============================================================
+クロール実行サマリー
+============================================================
+開始時間: 2025-05-11 18:18:38
+終了時間: 2025-05-11 18:19:10
+所要時間: 0:00:31.880025
+
+結果:
+✓ Markdownファイル: ./temp_output/gateway.docs.projectx.com.md
+✓ PDFファイル: ./temp_output/gateway.docs.projectx.com.pdf
+✓ 差分レポート: ./temp_output/gateway.docs.projectx.com_diff_report.md
+
+変更状態: 変更が検出されました
+============================================================
+連結見出しを修正しています...
+クロール完了: Sun May 11 18:19:10 JST 2025
+出力ファイルは ./temp_output ディレクトリに保存されました
+生成されたファイル:
+total 396K
+-rw-r--r-- 1 janwon_k janwon_k 1.3K May 11  2025 crawler.log
+-rw-r--r-- 1 janwon_k janwon_k  808 May 11 18:18 crawler_config_used.json
+-rw-r--r-- 1 janwon_k janwon_k 1.1K May 11  2025 crawler_run.log
+-rw-r--r-- 1 janwon_k janwon_k  55K May 11 18:19 gateway.docs.projectx.com.md
+-rw-r--r-- 1 janwon_k janwon_k 284K May 11 18:19 gateway.docs.projectx.com.pdf
+-rw-r--r-- 1 janwon_k janwon_k 4.4K May 11 18:19 gateway.docs.projectx.com_diff_report.md
+-rw-r--r-- 1 janwon_k janwon_k  27K May 11  2025 gateway.docs.projectx.com_diff_report.pdf
+-rw-r--r-- 1 janwon_k janwon_k  336 May 11 18:19 gateway.docs.projectx.com_summary.md
+-rw-r--r-- 1 janwon_k janwon_k 6.0K May 11  2025 sitemap-gateway.docs.projectx.com.xml

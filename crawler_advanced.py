@@ -4,6 +4,7 @@ Webクローラーの拡張コンポーネント
 - 並列処理のサポート
 - PDF生成機能の改善
 - Discord通知機能
+- ビジュアルクローリング機能
 """
 
 import os
@@ -13,12 +14,20 @@ import logging
 import asyncio
 import pdfkit
 import markdown
-from typing import Dict, List, Optional, Set, Tuple, Any
+from typing import Dict, List, Optional, Set, Tuple, Any, Union, Callable
 from datetime import datetime
 from urllib.parse import urlparse
 from discord_webhook import DiscordWebhook, DiscordEmbed
 import threading
 from concurrent.futures import ThreadPoolExecutor
+
+# ビジュアルクローリング機能をインポート
+try:
+    from visual_crawler import crawl_url_visual
+    VISUAL_CRAWLING_AVAILABLE = True
+except ImportError:
+    VISUAL_CRAWLING_AVAILABLE = False
+    logging.warning("ビジュアルクローリング機能が利用できません。依存ライブラリがインストールされていない可能性があります。")
 
 
 class PdfConverter:
@@ -254,7 +263,7 @@ class AsyncCrawler:
     def __init__(self, config, components):
         """
         非同期クローラーの初期化
-        
+
         Args:
             config: クローラー設定
             components: 必要なコンポーネント（url_filter, fetcher, parser, markdown_converter, cache, repository）
@@ -266,19 +275,23 @@ class AsyncCrawler:
         self.markdown_converter = components['markdown_converter']
         self.cache = components.get('cache')
         self.repository = components['repository']
-        
+
+        # ビジュアルクローリングモードの設定
+        self.visual_mode = getattr(config, 'visual_mode', False)
+        self.visual_config = getattr(config, 'visual_config', {})
+
         # クロール状態の追跡
         self.visited_urls = set()
         self.queued_urls = set([config.base_url])
         self.queue = asyncio.Queue()
         self.queue.put_nowait(config.base_url)
-        
+
         # 差分情報の追跡
         self.new_pages = []
         self.updated_pages = []
         self.deleted_pages = []
         self.page_diffs = {}
-        
+
         # 統計データ
         self.stats = {
             'start_time': time.time(),
@@ -286,13 +299,14 @@ class AsyncCrawler:
             'processed_urls': 0,
             'successful_fetches': 0,
             'failed_fetches': 0,
-            'skipped_urls': 0
+            'skipped_urls': 0,
+            'visual_mode': self.visual_mode
         }
-        
+
         # 並列処理の制御
         self.max_workers = config.max_workers
         self.semaphore = asyncio.Semaphore(self.max_workers)
-        
+
         # 状態制御
         self.is_running = False
         self.stop_event = asyncio.Event()
@@ -405,63 +419,85 @@ class AsyncCrawler:
             # 訪問済みとしてマーク
             self.visited_urls.add(url)
             self.stats['processed_urls'] += 1
-            
-            # キャッシュからページ情報を取得
-            cached_page = None
-            if self.cache and self.config.diff_detection:
-                cached_page = self.cache.get_page(url)
-            
-            # ページのHTMLを取得（条件付きリクエスト）
-            etag = cached_page.get('etag') if cached_page else None
-            last_modified = cached_page.get('last_modified') if cached_page else None
-            
-            html, headers_info = await self.fetcher.fetch_async(url, etag, last_modified)
-            
-            # 304 Not Modified の場合、キャッシュから前回のコンテンツを使用
-            if headers_info.get('status_code') == 304 and cached_page:
-                logging.info(f"Using cached content for {url}")
-                page_data = {
-                    'url': url,
-                    'title': cached_page['title'],
-                    'html_content': '', # HTMLは保存不要
-                    'markdown_content': cached_page['markdown_content'],
-                    'etag': cached_page['etag'],
-                    'last_modified': cached_page['last_modified'],
-                    'meta_description': cached_page.get('meta_description', '')
-                }
-                self.repository.add(page_data)
-                return
-            
-            # HTMLが取得できなかった場合はスキップ
-            if html is None:
-                self.stats['skipped_urls'] += 1
-                self.repository.add({'url': url, 'title': 'Error', 'html_content': ''}, status='skipped')
-                return
-            
-            self.stats['successful_fetches'] += 1
-            
-            # HTMLを解析してコンテンツとリンクを抽出
-            page_data, links = self.parser.parse(html, url)
-            
-            # コンテンツがない場合はスキップ
-            if not page_data.get('html_content'):
-                self.stats['skipped_urls'] += 1
-                return
-            
-            # ヘッダー情報を追加
-            page_data['etag'] = headers_info.get('etag')
-            page_data['last_modified'] = headers_info.get('last_modified')
-            
-            # HTMLをMarkdownに変換
-            page_data = self.markdown_converter.convert(page_data)
-            
-            # 差分検知（有効な場合）
+
+            # ビジュアルモードが有効かつライブラリが利用可能な場合
+            if self.visual_mode and VISUAL_CRAWLING_AVAILABLE:
+                # スレッドプールでビジュアルクローリングを実行
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(crawl_url_visual, url, self.visual_config)
+                    page_data = await asyncio.get_event_loop().run_in_executor(
+                        None, lambda: future.result()
+                    )
+
+                if "error" in page_data:
+                    logging.error(f"ビジュアルクローリングエラー {url}: {page_data['error']}")
+                    self.stats['failed_fetches'] += 1
+                    self.repository.add({'url': url, 'title': 'Error', 'html_content': ''}, status='error')
+                    return
+
+                # リンクはビジュアルモードでは抽出されないため空のリストを使用
+                links = []
+
+                logging.info(f"ビジュアルモードでページをクロール: {url}")
+
+            else:
+                # 通常のクローリングプロセス
+                # キャッシュからページ情報を取得
+                cached_page = None
+                if self.cache and self.config.diff_detection:
+                    cached_page = self.cache.get_page(url)
+
+                # ページのHTMLを取得（条件付きリクエスト）
+                etag = cached_page.get('etag') if cached_page else None
+                last_modified = cached_page.get('last_modified') if cached_page else None
+
+                html, headers_info = await self.fetcher.fetch_async(url, etag, last_modified)
+
+                # 304 Not Modified の場合、キャッシュから前回のコンテンツを使用
+                if headers_info.get('status_code') == 304 and cached_page:
+                    logging.info(f"キャッシュされたコンテンツを使用: {url}")
+                    page_data = {
+                        'url': url,
+                        'title': cached_page['title'],
+                        'html_content': '', # HTMLは保存不要
+                        'markdown_content': cached_page['markdown_content'],
+                        'etag': cached_page['etag'],
+                        'last_modified': cached_page['last_modified'],
+                        'meta_description': cached_page.get('meta_description', '')
+                    }
+                    self.repository.add(page_data)
+                    return
+
+                # HTMLが取得できなかった場合はスキップ
+                if html is None:
+                    self.stats['skipped_urls'] += 1
+                    self.repository.add({'url': url, 'title': 'Error', 'html_content': ''}, status='skipped')
+                    return
+
+                self.stats['successful_fetches'] += 1
+
+                # HTMLを解析してコンテンツとリンクを抽出
+                page_data, links = self.parser.parse(html, url)
+
+                # コンテンツがない場合はスキップ
+                if not page_data.get('html_content'):
+                    self.stats['skipped_urls'] += 1
+                    return
+
+                # ヘッダー情報を追加
+                page_data['etag'] = headers_info.get('etag')
+                page_data['last_modified'] = headers_info.get('last_modified')
+
+                # HTMLをMarkdownに変換
+                page_data = self.markdown_converter.convert(page_data)
+
+            # 差分検知（有効な場合）- ビジュアルモードでも共通
             if self.cache and self.config.diff_detection:
                 markdown_content = page_data.get('markdown_content', '')
-                
+
                 # キャッシュに追加または更新
                 is_update = self.cache.add_or_update_page(page_data)
-                
+
                 if is_update:
                     # コンテンツが変更されている場合のみ更新ページとしてマーク
                     if self.cache.is_content_changed(url, markdown_content):
@@ -470,13 +506,13 @@ class AsyncCrawler:
                 else:
                     # 新規ページ
                     self.new_pages.append(url)
-            
+
             # コンテンツを保存
             self.repository.add(page_data)
-            
-            # 新しいリンクをキューに追加
+
+            # 新しいリンクをキューに追加（ビジュアルモードでは空のリストになる可能性がある）
             await self._add_new_links_to_queue(links)
-            
+
         except Exception as e:
             logging.error(f"URL処理エラー {url}: {e}")
             self.stats['failed_fetches'] += 1
@@ -595,10 +631,19 @@ def generate_sitemap(repository, output_dir, domain, url_blacklist=None):
 def run_colab_crawler(config):
     """Google Colab向けの改善されたクローラー実行関数"""
     from crawler_components import (
-        UrlFilter, Fetcher, Parser, MarkdownConverter, 
+        UrlFilter, Fetcher, Parser, MarkdownConverter,
         ContentRepository, CrawlCache, FileExporter
     )
-    
+
+    # ビジュアルモードの確認
+    visual_mode = getattr(config, 'visual_mode', False)
+    if visual_mode:
+        if not VISUAL_CRAWLING_AVAILABLE:
+            logging.warning("ビジュアルクローリングモードが指定されましたが、必要な依存関係が不足しています。標準モードにフォールバックします。")
+            config.visual_mode = False
+        else:
+            logging.info("ビジュアルクローリングモードが有効です。")
+
     # ロガーの設定
     log_file = os.path.join(config.output_dir, "crawler.log")
     logging.basicConfig(
@@ -609,24 +654,24 @@ def run_colab_crawler(config):
             logging.FileHandler(log_file)
         ]
     )
-    
+
     try:
         # 出力ディレクトリを作成
         os.makedirs(config.output_dir, exist_ok=True)
-        
+
         # ドメイン名を取得
         domain = urlparse(config.base_url).netloc
-        
+
         # 各コンポーネントの初期化
         url_filter = UrlFilter(config)
         fetcher = Fetcher(config)
         parser = Parser(url_filter)
         markdown_converter = MarkdownConverter()
         repository = ContentRepository()
-        
+
         # 差分検知が有効な場合はキャッシュを初期化
         cache = CrawlCache(domain, config.cache_dir) if config.diff_detection else None
-        
+
         # 非同期クローラーを初期化
         components = {
             'url_filter': url_filter,
@@ -636,7 +681,7 @@ def run_colab_crawler(config):
             'repository': repository,
             'cache': cache
         }
-        
+
         crawler = AsyncCrawler(config, components)
         
         # クローラーを実行（非同期実行をイベントループで処理）

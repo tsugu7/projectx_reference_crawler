@@ -76,7 +76,14 @@ class ConfigWizard:
             {'name': 'normalize_urls', 'message': 'URLの正規化を有効にする', 'default': True},
             {'name': 'respect_robots_txt', 'message': 'robots.txtを尊重する', 'default': True},
             {'name': 'follow_redirects', 'message': 'リダイレクトを追跡する', 'default': True},
+            {'name': 'visual_mode', 'message': 'ビジュアルクローリングモードを有効にする（スクリーンショットベース、要依存ライブラリ）', 'default': False},
         ]
+
+        # ビジュアルモードの設定オプション
+        self.visual_options = {
+            'save_screenshots': {'message': 'スクリーンショットを保存する', 'default': True},
+            'ocr_lang': {'message': 'OCR言語 [eng+jpn]: ', 'default': 'eng+jpn'},
+        }
     
     def run(self):
         """ウィザードを実行して設定を収集"""
@@ -130,6 +137,42 @@ class ConfigWizard:
                     print("エラー: Y/n で入力してください。")
             
             self.config[name] = value
+
+            # ビジュアルモードが有効な場合、追加の設定を収集
+            if name == 'visual_mode' and value:
+                print("\nビジュアルクローリングモードの設定:\n")
+
+                # ビジュアル設定オブジェクトを初期化
+                self.config['visual_config'] = {}
+
+                # ビジュアルモードのオプションを処理
+                for opt_name, opt_info in self.visual_options.items():
+                    message = opt_info['message']
+                    default = opt_info['default']
+
+                    if isinstance(default, bool):
+                        # 真偽値オプションの処理
+                        default_str = "Y" if default else "n"
+                        while True:
+                            value = input(f"{message} [{default_str}]: ")
+                            if value == '':
+                                value = default
+                                break
+                            elif value.lower() in ('y', 'yes'):
+                                value = True
+                                break
+                            elif value.lower() in ('n', 'no'):
+                                value = False
+                                break
+                            else:
+                                print("エラー: Y/n で入力してください。")
+                    else:
+                        # 文字列オプションの処理
+                        value = input(message)
+                        if value == '':
+                            value = default
+
+                    self.config['visual_config'][opt_name] = value
         
         # 設定オブジェクトの作成
         try:

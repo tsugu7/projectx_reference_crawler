@@ -1,0 +1,13 @@
+{
+  "base_url": "https://gateway.docs.projectx.com/docs/getting-started",
+  "max_pages": 10,
+  "delay": 2.0,
+  "max_workers": 1,
+  "output_dir": "./visual_output",
+  "cache_dir": "./visual_cache",
+  "visual_mode": true,
+  "visual_config": {
+    "save_screenshots": true,
+    "ocr_lang": "eng+jpn"
+  }
+}
