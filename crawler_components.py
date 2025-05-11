@@ -602,6 +602,9 @@ class MarkdownConverter:
         # カテゴリ情報などのテキストは保持
         markdown_content = re.sub(r'\[ðï¸\s*([^\]]*?)(\s*\d+\s*items)?\]', r'[\1]', markdown_content)
 
+        # ## [ Text]の形式でスペースが余分に入っている場合を修正
+        markdown_content = re.sub(r'(#{1,6})\s*\[ ', r'\1 [', markdown_content)
+
         # ##+ で始まる見出し行内の特殊文字を削除
         markdown_content = re.sub(r'(#{1,6})\s+\[(ðï¸?\s*)?([^\]]*?)\](\([^)]+\))', r'\1 [\3]\4', markdown_content)
 
@@ -623,6 +626,12 @@ class MarkdownConverter:
         markdown_content = re.sub(r'(##\s*\[[^\]]+\]\([^)]+\))([A-Za-z])', r'\1\n\2', markdown_content)
 
         # リンク内のテキストを保持しつつ、その直後に続く説明文を適切に改行
+        # URLの後に続く説明文があれば改行して区切る
+        # ## [ Title](url)Description -> ## [ Title](url)\nDescription
+        markdown_content = re.sub(r'(##\s*\[.*?\]\(https?://[^)]+\))([A-Za-z])', r'\1\n\2', markdown_content)
+
+        # 通常のリンクスタイルにも適用（サブレベルのヘッダーやリストでも改行）
+        # リンク全体の独立性を保ち、その直後に説明文があれば区切る
         markdown_content = re.sub(r'(\]\(https?://[^)]+\))([A-Za-z])', r'\1\n\2', markdown_content)
 
         # 連続する ## が残っている場合は削除（最後の ## など）
