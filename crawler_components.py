@@ -427,7 +427,7 @@ def copy_element(element):
 
 class MarkdownConverter:
     """HTMLコンテンツをMarkdown形式に変換するコンポーネント（改善版）"""
-    
+
     def __init__(self, config: Optional[Dict] = None):
         self.converter = html2text.HTML2Text()
         self.converter.ignore_links = False
@@ -438,67 +438,257 @@ class MarkdownConverter:
         self.converter.single_line_break = True  # 単一の改行を維持
         self.converter.wrap_links = False  # リンクを折り返さない
         self.converter.emphasis_mark = '*'  # 強調のマークとして*を使用
-        
+        self.converter.skip_internal_links = True  # アンカーリンクをスキップ
+
         # オプション設定を適用
         if config:
             for key, value in config.items():
                 if hasattr(self.converter, key):
                     setattr(self.converter, key, value)
-        
+
     def convert(self, page_data: Dict) -> Dict:
         """HTMLをMarkdownに変換する"""
         title = page_data['title']
         html_content = page_data['html_content']
         url = page_data['url']
         meta_description = page_data.get('meta_description', '')
-        
+
+        # HTMLの前処理（不要な要素や属性の削除）
+        html_content = self._preprocess_html(html_content)
+
         # HTMLをMarkdownに変換
         try:
             markdown_content = self.converter.handle(html_content)
-            
+
             # 画像パスを修正（相対パスがある場合）
             markdown_content = self._fix_image_paths(markdown_content, url)
-            
-            # 余分な空行を削除（3つ以上連続する改行を2つに縮小）
-            markdown_content = re.sub(r'\n{3,}', '\n\n', markdown_content)
-            
+
+            # 変換後の後処理
+            markdown_content = self._postprocess_markdown(markdown_content)
+
         except Exception as e:
             logging.error(f"Markdown conversion error for {url}: {e}")
             markdown_content = f"Error converting content: {str(e)}"
-        
+
         # Markdownタイトルを作成
         markdown_title = f"# {title}\n\n"
-        
+
         # メタ説明を追加（あれば）
         meta_section = f"*{meta_description}*\n\n" if meta_description else ""
-        
+
         # URL情報を追加
         url_info = f"*Source: {url}*\n\n"
-        
+
         # 最終的なMarkdownコンテンツを組み立て
         full_markdown = markdown_title + meta_section + url_info + markdown_content
-        
+
         # 結果を返す
         result = page_data.copy()
         result['markdown_content'] = full_markdown
-        
+
         return result
-    
+
+    def _preprocess_html(self, html_content: str) -> str:
+        """HTMLの前処理を行う"""
+        try:
+            # lxmlを使用してHTMLを解析
+            doc = lxml.html.fromstring(html_content)
+
+            # 「Direct link to」などの不要なテキストを含むa要素を修正
+            for a_elem in doc.xpath('//a[contains(text(), "Direct link to")]'):
+                # テキストを空にする
+                a_elem.text = ""
+
+            # â などの特殊文字を含む要素を修正
+            for elem in doc.xpath('//*[contains(text(), "â")]'):
+                # テキストを置換
+                if elem.text:
+                    elem.text = elem.text.replace('â', '')
+
+            # ドキュメント全体から ðï¸ などの絵文字や特殊文字を削除（より徹底的なアプローチ）
+            for elem in doc.xpath('//*'):
+                # テキストノードをチェック
+                if elem.text:
+                    # 特殊文字を削除
+                    elem.text = elem.text.replace('ðï', '').replace('ðï¸', '')
+
+                # テイルテキスト（要素と次の要素の間のテキスト）もチェック
+                if elem.tail:
+                    elem.tail = elem.tail.replace('ðï', '').replace('ðï¸', '')
+
+            # カテゴリページのフォーマットを修正（h2内の絵文字などを削除）
+            for h2 in doc.xpath('//h2'):
+                # スペースの後の数字（items）などが含まれている場合は削除
+                if h2.text and re.search(r'\d+\s*items', h2.text):
+                    h2.text = re.sub(r'\d+\s*items', '', h2.text)
+
+            # リンクテキスト内の特殊文字を削除（アンカーなどを含む）
+            for a in doc.xpath('//a'):
+                if a.text and ('ðï' in a.text or 'ðï¸' in a.text):
+                    a.text = a.text.replace('ðï', '').replace('ðï¸', '')
+
+            # 表組みの整形を改善（table要素にクラスを追加）
+            for table in doc.xpath('//table'):
+                # Markdownでの表組み変換を改善するためのクラスを追加
+                table.attrib['class'] = 'markdown-table'
+
+                # テーブルのセルにあるスペースを調整
+                for cell in table.xpath('.//th | .//td'):
+                    if cell.text:
+                        cell.text = cell.text.strip()
+                        # セル内の特殊文字も削除
+                        cell.text = cell.text.replace('ðï', '').replace('ðï¸', '')
+
+            # HTML文字列に戻す前に最終チェック - 絵文字コードのようなものをすべて削除
+            # すべてのテキストノードを取得してから文字列に戻す
+            # これによりまだ処理されていない特殊文字を徹底的に削除
+            for elem in doc.xpath('//*'):
+                for attr_name in elem.attrib:
+                    if isinstance(elem.attrib[attr_name], str):
+                        elem.attrib[attr_name] = elem.attrib[attr_name].replace('ðï', '').replace('ðï¸', '')
+
+                if hasattr(elem, 'text') and elem.text:
+                    elem.text = re.sub(r'[^\x00-\x7F\u0080-\u00FF\u0100-\u017F\u0180-\u024F\u0370-\u03FF\u0400-\u04FF]+', '', elem.text)
+
+                if hasattr(elem, 'tail') and elem.tail:
+                    elem.tail = re.sub(r'[^\x00-\x7F\u0080-\u00FF\u0100-\u017F\u0180-\u024F\u0370-\u03FF\u0400-\u04FF]+', '', elem.tail)
+
+            # HTML文字列に戻す
+            html_cleaned = lxml.html.tostring(doc, encoding='unicode')
+
+            # バイトで処理できる文字列表現に変換して、非ASCII文字を確実に処理
+            byte_html = html_cleaned.encode('ascii', 'ignore')
+            html_cleaned = byte_html.decode('ascii')
+
+            # 最終的なセーフティネット：直接文字列置換で残っている可能性のある特殊文字を削除
+            html_cleaned = html_cleaned.replace('ðï', '').replace('ðï¸', '')
+
+            return html_cleaned
+        except Exception as e:
+            logging.warning(f"HTML preprocessing error: {e}")
+            # エラーが発生した場合は元のHTMLを返す
+            return html_content
+
+    def _postprocess_markdown(self, markdown_content: str) -> str:
+        """Markdown変換後の後処理を行う"""
+        # 余分な空行を削除（3つ以上連続する改行を2つに縮小）
+        markdown_content = re.sub(r'\n{3,}', '\n\n', markdown_content)
+
+        # 表組みの整形を改善
+        markdown_content = self._improve_tables(markdown_content)
+
+        # 「Direct link to」などの不要なテキストを削除
+        markdown_content = re.sub(r'\[â\]\([^)]+\s+"Direct link to [^"]+"\)', '', markdown_content)
+        markdown_content = re.sub(r'\[\]\([^)]+\s+"Direct link to [^"]+"\)', '', markdown_content)
+        markdown_content = re.sub(r'\[[^\]]*\]\([^)]+\s+"Direct link to [^"]+"\)', '', markdown_content)
+
+        # 特殊文字を修正
+        markdown_content = markdown_content.replace('â', '')
+        markdown_content = markdown_content.replace('ðï¸', '')
+        markdown_content = markdown_content.replace('ðï', '')
+
+        # 連続する空白を1つに
+        markdown_content = re.sub(r' {2,}', ' ', markdown_content)
+
+        # リスト項目の後の不要な改行を修正
+        markdown_content = re.sub(r'(\* .*)\n\n(?=\* )', r'\1\n', markdown_content)
+
+        # カテゴリページの見出しフォーマットを改善
+        # ヘッダーの中の"ðï¸"を削除
+        markdown_content = re.sub(r'##\s*\[(ðï¸\s*)?([^\]]*?)(\s*\d+\s*items)?\]\(([^)]+)\)', r'## [\2](\4)', markdown_content)
+
+        # マークダウンリンク内の特殊文字を置換する（より汎用的なアプローチ）
+        # [ðï¸ Something] の形式を [Something] に変換
+        markdown_content = re.sub(r'\[(ðï¸?\s*)?([^\]]*?)(\s*\d+\s*items)?\]', r'[\2]', markdown_content)
+
+        # ##+ で始まる見出し行内の特殊文字を削除
+        markdown_content = re.sub(r'(#{1,6})\s+\[(ðï¸?\s*)?([^\]]*?)\](\([^)]+\))', r'\1 [\3]\4', markdown_content)
+
+        # 残りの特殊文字をすべてのリンクテキストから削除 (##, ###, #### のすべての見出しレベル)
+        markdown_content = re.sub(r'(#{1,4})\s*\[ðï¸?\s*([^\]]*)\]\(([^)]+)\)', r'\1 [\2](\3)', markdown_content)
+
+        # 連続するヘッダーの間に改行を追加
+        markdown_content = re.sub(r'(##\s*\[.*?\]\(.*?\))\s*(##)', r'\1\n\n\2', markdown_content)
+
+        # カテゴリページのリンクリストの間隔を調整
+        markdown_content = re.sub(r'(\]\([^)]+\))\n\n(\*)', r'\1\n\2', markdown_content)
+
+        # カテゴリページの説明文が見出しとリンクされている場合、適切に分離
+        markdown_content = re.sub(r'##\s*\[(.*?)\]\((.*?)\)(.*?)##', r'## [\1](\2)\n\3\n\n##', markdown_content)
+
+        # 連続する ## が残っている場合は削除（最後の ## など）
+        markdown_content = re.sub(r'##\s*$', '', markdown_content)
+
+        # テーブル内の特殊文字も削除
+        markdown_content = re.sub(r'\|(.*?)ðï¸(.*?)\|', r'|\1\2|', markdown_content)
+        markdown_content = re.sub(r'\|(.*?)ðï(.*?)\|', r'|\1\2|', markdown_content)
+
+        # 残っている特殊文字を直接置換（最終セーフティネット）
+        markdown_content = markdown_content.replace('ðï¸', '')
+        markdown_content = markdown_content.replace('ðï', '')
+
+        # 非ASCII文字を確実に処理するための最終対策
+        # ASCII文字のみを許可（バイト操作でエンコード/デコード）
+        markdown_bytes = markdown_content.encode('ascii', 'ignore')
+        markdown_content = markdown_bytes.decode('ascii')
+
+        # 全体を整理（余分な改行を調整）
+        markdown_content = re.sub(r'\n{3,}', '\n\n', markdown_content)
+
+        return markdown_content
+
+    def _improve_tables(self, markdown_content: str) -> str:
+        """表組みのマークダウン表現を改善する"""
+        # マークダウンの表を検出して改善
+        table_pattern = r'(\|[^\n]+\|\n\|[-:| ]+\|\n(?:\|[^\n]+\|\n)+)'
+
+        def fix_table(match):
+            table = match.group(1)
+
+            # 列の幅を揃える
+            lines = table.strip().split('\n')
+            if len(lines) < 2:
+                return table
+
+            # 各行のセル数をカウント
+            cells_per_row = [line.count('|') - 1 for line in lines]
+            max_cells = max(cells_per_row)
+
+            # 各行を調整
+            for i in range(len(lines)):
+                cells = lines[i].split('|')
+                cells = [c.strip() for c in cells if c]  # 空のセルを削除
+
+                # セルの足りない分を追加
+                while len(cells) < max_cells:
+                    cells.append('')
+
+                # 行を再構成
+                lines[i] = '| ' + ' | '.join(cells) + ' |'
+
+            # 修正された表を返す
+            return '\n'.join(lines) + '\n'
+
+        # 表組みを修正
+        markdown_content = re.sub(table_pattern, fix_table, markdown_content)
+
+        return markdown_content
+
     def _fix_image_paths(self, markdown_content: str, base_url: str) -> str:
         """Markdown内の画像パスを修正する"""
         # ![alt](relative/path.jpg) 形式の画像タグを検出して修正
         def replace_img_path(match):
             alt_text = match.group(1)
             img_path = match.group(2)
-            
+
             # 既に絶対URLなら変更しない
             if img_path.startswith(('http://', 'https://', '//')):
                 return f"![{alt_text}]({img_path})"
-            
+
             # 相対パスを絶対パスに変換
             absolute_path = urljoin(base_url, img_path)
             return f"![{alt_text}]({absolute_path})"
-        
+
         # 画像パターンを正規表現で検索して置換
         return re.sub(r'!\[(.*?)\]\(([^)]+)\)', replace_img_path, markdown_content)
 
