@@ -788,15 +788,30 @@ class MarkdownConverter:
         markdown_content = markdown_content.replace('ðï¸', '')
         markdown_content = markdown_content.replace('ðï', '')
 
-        # 見出し行をすべて抽出して特殊文字を除去（最終的な手段）
+        # 見出し行をすべて抽出して特殊文字を除去（最終的な手段）- 徹底的に除去
         lines = markdown_content.splitlines()
         for i, line in enumerate(lines):
+            # 見出し行を対象に
             if line.startswith('#'):
-                # 見出し行から特殊文字パターンを強制的に削除
-                lines[i] = re.sub(r'ðï[¸]?', '', line)
+                # 最も問題の多い特殊文字パターンを直接削除（様々なバリエーションに対応）
+                lines[i] = line.replace('ðï¸', '').replace('ðï', '')
+
+                # 正規表現でも削除してバックアップ（Unicode対応）
+                lines[i] = re.sub(r'ð[ï]?[¸]?', '', lines[i])
+
+                # 特殊な見出しパターンを修正（例: ## [ðï¸ Account] → ## [Account]）
+                lines[i] = re.sub(r'(#{1,6})\s*\[\s*ðï¸?\s*([^\]]+)\]', r'\1 [\2]', lines[i])
+
+                # 特殊文字で始まるリンクテキストの修正
+                if '[ð' in lines[i]:
+                    lines[i] = re.sub(r'\[ð[ï]?[¸]?\s*([^\]]+)\]', r'[\1]', lines[i])
 
         # 処理後の行を結合
         markdown_content = '\n'.join(lines)
+
+        # 最後のセーフティネット - 特殊文字を含む見出しの修正
+        # すべての見出し+リンクパターンを検索して特殊文字を削除
+        markdown_content = re.sub(r'(#{1,6}\s+)\[(ð[ï]?[¸]?\s*)?([^\]]*?)\](\([^)]+\))', r'\1[\3]\4', markdown_content)
 
         # コンテンツの区切りを明確にする（見出し間の区切り）
         markdown_content = re.sub(r'(#{2,4}\s+[^\n]+)\n([^#\n])', r'\1\n\n\2', markdown_content)
@@ -807,8 +822,23 @@ class MarkdownConverter:
             clean_content = ''
             for line in markdown_content.splitlines():
                 # 見出し行やその他の重要なパターンは特別に処理
-                if re.match(r'^#{1,6}\s+', line) or '[' in line or '*' in line or '|' in line:
-                    # 不要な特殊文字だけを削除
+                if re.match(r'^#{1,6}\s+', line):
+                    # 見出し行内の特殊文字に絞って徹底的に削除
+                    # 最初にðï¸パターンを直接削除（最重要の問題文字）
+                    line = line.replace('ðï¸', '').replace('ðï', '')
+
+                    # 特殊な見出しパターンを修正
+                    line = re.sub(r'(#{1,6})\s*\[\s*ð[ï]?[¸]?\s*([^\]]+)\]', r'\1 [\2]', line)
+
+                    # 特殊文字で始まるリンクテキストの修正
+                    if '[ð' in line:
+                        line = re.sub(r'\[ð[ï]?[¸]?\s*([^\]]+)\]', r'[\1]', line)
+
+                    # 最後に残りの特殊文字も削除
+                    line = re.sub(r'[^\x00-\x7F\u0080-\u00FF\u0100-\u017F\u0180-\u024F\u0370-\u03FF\u0400-\u04FF\s\[\]\(\)\*\|\.,:;\'"!?-]', '', line)
+                elif '[' in line or '*' in line or '|' in line:
+                    # その他の重要パターン（リンク・リスト・表）内の特殊文字を削除
+                    line = line.replace('ðï¸', '').replace('ðï', '')
                     line = re.sub(r'[^\x00-\x7F\u0080-\u00FF\u0100-\u017F\u0180-\u024F\u0370-\u03FF\u0400-\u04FF\s\[\]\(\)\*\|\.,:;\'"!?-]', '', line)
                 else:
                     # 一般のテキスト行はより厳密に処理
