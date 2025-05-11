@@ -677,6 +677,35 @@ class MarkdownConverter:
         # 複数の連続スペースをひとつに修正（リンク内での整形）
         markdown_content = re.sub(r'\[([^\]]*?)\s{2,}([^\]]*?)\]', r'[\1 \2]', markdown_content)
 
+        # リンク全体を包括的に処理する - 改善版アルゴリズム
+        # リンクパターン検出
+        link_pattern = re.compile(r'\[([^\]]*?)\]\(([^)]*?)\)')
+
+        def fix_link(match):
+            # リンクテキスト内の処理
+            link_text = match.group(1)
+            url = match.group(2)
+
+            # 1. リンクテキスト内の改行を修正
+            link_text = re.sub(r'\s*\n\s*', ' ', link_text)
+
+            # 2. リンクテキスト内の複数スペースを単一スペースに
+            link_text = re.sub(r'\s+', ' ', link_text).strip()
+
+            # 3. APIエンドポイントパス内のスペースを削除
+            # "/api/Path/ search" → "/api/Path/search" だが、"search Open" はそのまま
+            if '/api/' in link_text or '/v1/' in link_text:
+                # API パスのパターンを検出してスペースを削除
+                link_text = re.sub(r'(\/[a-zA-Z0-9\/-]+\/)\s+([a-zA-Z0-9-]+)', r'\1\2', link_text)
+
+            # 4. URL内のすべてのスペースを削除
+            url = re.sub(r'\s', '', url)
+
+            return f"[{link_text}]({url})"
+
+        # すべてのリンクを処理
+        markdown_content = link_pattern.sub(fix_link, markdown_content)
+
         # リンク後の説明文を適切に区切る処理（改良版）
         # URL直後に続く説明文があれば改行して区切る
         markdown_content = re.sub(r'(\]\([^)]+\))([\w])', r'\1\n\2', markdown_content)
