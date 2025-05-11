@@ -651,6 +651,12 @@ class MarkdownConverter:
             # 見出し全体が複数行に分かれている場合を修正
             markdown_content = re.sub(r'(#{1,6}\s+[A-Za-z][^\n]*)\s*\n\s*([A-Za-z][^\n]*)', r'\1 \2', markdown_content)
 
+            # リンクテキストとURL間の改行を修正（例: [Search for PositionsAPI URL: /api/Position/search\nOpen](https://...)）
+            markdown_content = re.sub(r'(\[(?:[^\[\]]|\[[^\[\]]*\])*?)\n\s*([^\]]*?\]\([^)]+\))', r'\1 \2', markdown_content)
+
+            # リンクのURL部分が改行されている場合も修正
+            markdown_content = re.sub(r'(\]\()([^)\n]*)\n\s*([^)]*\))', r'\1\2\3', markdown_content)
+
         # カテゴリページの見出しフォーマットを改善（特殊文字を削除しつつ）
         markdown_content = re.sub(r'##\s*\[(ðï¸\s*)?([^\]]*?)(\s*\d+\s*items)?\]\(([^)]+)\)', r'## [\2](\4)', markdown_content)
 
@@ -663,6 +669,13 @@ class MarkdownConverter:
         # 見出し行内の特殊文字を削除（すべての見出しレベルに対応）
         markdown_content = re.sub(r'(#{1,6})\s+\[(ðï¸?\s*)?([^\]]*?)\](\([^)]+\))', r'\1 [\3]\4', markdown_content)
         markdown_content = re.sub(r'(#{1,4})\s*\[ðï¸?\s*([^\]]*)\]\(([^)]+)\)', r'\1 [\2](\3)', markdown_content)
+
+        # 任意のリンクパターンの修正 - 特に見出し以外の場所にある分割されたリンク
+        # 例: [Search    for    PositionsAPI    URL:    /api/Position/search\n Open](...) のような場合
+        markdown_content = re.sub(r'\[([^\]]*?)\n\s*([^\]]*?)\](\([^)]+\))', r'[\1 \2]\3', markdown_content)
+
+        # 複数の連続スペースをひとつに修正（リンク内での整形）
+        markdown_content = re.sub(r'\[([^\]]*?)\s{2,}([^\]]*?)\]', r'[\1 \2]', markdown_content)
 
         # リンク後の説明文を適切に区切る処理（改良版）
         # URL直後に続く説明文があれば改行して区切る
